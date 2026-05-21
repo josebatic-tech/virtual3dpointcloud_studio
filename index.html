@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Depth Point Cloud</title>
+  <link rel="stylesheet" href="style.css"/>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./node_modules/three/build/three.module.js",
+      "@huggingface/transformers": "./node_modules/@huggingface/transformers/dist/transformers.js"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo">Depth<span> / </span>Cloud</div>
+    <div id="status">waiting…</div>
+  </header>
+
+  <main>
+    <aside id="sidebar">
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Camera</div>
+        <div id="cam-controls">
+          <button id="btnStart">▶ Start</button>
+          <button id="btnDepth" disabled>◈ Depth</button>
+          <button id="btnStop"  disabled>■ Stop</button>
+        </div>
+        <div class="param-row" id="deviceSelectorRow" style="display:none;">
+          <label>Device</label>
+          <select id="cameraDevice" style="flex:1;background:transparent;border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:9px;padding:4px 6px;border-radius:var(--radius);outline:none;">
+            <option value="">— select camera —</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">View</span>
+          <div style="display:flex; gap:4px; flex:1;">
+            <button id="btnViewPointCloud" class="view-btn active" style="flex:1;">3D Cloud</button>
+            <button id="btnViewCamera" class="view-btn" style="flex:1;">Camera</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Director</div>
+        <div class="param-row">
+          <label>Speed</label>
+          <input type="range" id="camSpeed" min="0.01" max="0.3" step="0.01" value="0.08"/>
+          <span class="val" id="camSpeedVal">0.08</span>
+        </div>
+        <div class="param-row">
+          <label>Lens</label>
+          <input type="range" id="lensFocus" min="20" max="100" step="5" value="55"/>
+          <span class="val" id="lensFocusVal">55</span>
+        </div>
+        <div style="display:flex; gap:4px; margin-top:8px;">
+          <button id="btnCamLeft" class="preset-btn" style="flex:1;">⬅ -45°</button>
+          <button id="btnCamRight" class="preset-btn" style="flex:1;">➡ +45°</button>
+        </div>
+        <div style="display:flex; gap:4px; margin-top:12px; flex-wrap:wrap;">
+          <button id="btnBgGreen" class="preset-btn" style="flex:1; background:#1a5f3f !important; border-color:#1a5f3f !important; color:#fff !important;">🟢</button>
+          <button id="btnBgBlue" class="preset-btn" style="flex:1; background:#0d3b66 !important; border-color:#0d3b66 !important; color:#fff !important;">🔵</button>
+          <button id="btnBgRed" class="preset-btn" style="flex:1; background:#6b1a23 !important; border-color:#6b1a23 !important; color:#fff !important;">🔴</button>
+          <button id="btnBgYellow" class="preset-btn" style="flex:1; background:#8b7b2f !important; border-color:#8b7b2f !important; color:#fff !important;">🟡</button>
+        </div>
+        <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+          <div class="sidebar-section-title" style="margin:0 -8px 8px -8px;">Effects</div>
+          <div style="display:flex; gap:4px; margin-bottom:8px;">
+            <button id="btnParticleRain" class="preset-btn" style="flex:1;">🌧 Rain</button>
+            <button id="btnParticleSnow" class="preset-btn" style="flex:1;">❄ Snow</button>
+            <button id="btnParticleWind" class="preset-btn" style="flex:1;">💨 Wind</button>
+          </div>
+          <div class="param-row">
+            <label>Count</label>
+            <input type="range" id="particleCount" min="100" max="5000" step="100" value="2000"/>
+            <span class="val" id="particleCountVal">2000</span>
+          </div>
+          <div class="param-row">
+            <label>Opacity</label>
+            <input type="range" id="particleOpacity" min="0" max="1" step="0.1" value="0.6"/>
+            <span class="val" id="particleOpacityVal">0.6</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Point Cloud</div>
+        <div class="param-row">
+          <label>Pt Size</label>
+          <input type="range" id="ptSize" min="1" max="8" step="1" value="2"/>
+          <span class="val" id="ptSizeVal">2</span>
+        </div>
+        <div class="param-row">
+          <label>Density</label>
+          <input type="range" id="density" min="2" max="12" step="1" value="4"/>
+          <span class="val" id="densityVal">4</span>
+        </div>
+        <div class="param-row">
+          <label>Depth</label>
+          <input type="range" id="depthScale" min=".5" max="5" step=".1" value="2"/>
+          <span class="val" id="depthScaleVal">2.0</span>
+        </div>
+        <div class="param-row mt-6">
+          <label>Auto-rot</label>
+          <button id="btnRotate" class="btn-flex">↻ Off</button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Previews</div>
+        <div class="preview-panel" id="previewWebcam">
+          <span class="plabel">webcam</span>
+          <video id="video" autoplay muted playsinline></video>
+        </div>
+        <div class="preview-panel" id="previewDepth">
+          <span class="plabel">depth</span>
+          <canvas id="depthCanvas"></canvas>
+        </div>
+        <div class="preview-panel" id="previewSam">
+          <span class="plabel">sam mask</span>
+          <canvas id="samCanvas"></canvas>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:8px;">
+          <label class="toggle">
+            <input type="checkbox" id="togWebcam" checked data-preview="previewWebcam"/>
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="togDepthMap" checked data-preview="previewDepth"/>
+            <span class="toggle-slider"></span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="togSamMask" checked data-preview="previewSam"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Describe</div>
+        <div style="display:flex; gap:4px; margin-bottom:8px;">
+          <button id="btnModeFlorence" class="mode-btn active" style="flex:1;">Florence-2</button>
+          <button id="btnModeVLM" class="mode-btn" style="flex:1;">RealTime VLM</button>
+        </div>
+        <div class="param-row" id="hfTokenRow">
+          <label>HF Token</label>
+          <input type="password" id="hfToken" placeholder="hf_…" style="flex:1;background:transparent;border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:9px;padding:4px 6px;border-radius:var(--radius);outline:none;"/>
+        </div>
+        <button id="btnDescribe" disabled class="btn-wide">◈ Describe Scene</button>
+        <div id="descOutput" class="desc-output"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">StreamDiffusion</div>
+        <textarea id="sdPrompt" placeholder="Describe an image…" style="width:100%;height:40px;resize:none;font-family:var(--font-mono);font-size:9px;padding:6px;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);background:transparent;outline:none;"></textarea>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <label class="toggle" style="flex:1;">
+            <input type="checkbox" id="togStreamDiffusion"/>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label" style="flex:0;">Generate</span>
+        </div>
+        <div class="preview-panel" id="previewStreamDiffusion">
+          <span class="plabel">diffusion</span>
+          <img id="sdResultImg" style="width:100%;height:100%;object-fit:cover;display:none;"/>
+          <div id="sdLoading" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text-dim);font-size:9px;">ready</div>
+        </div>
+        <div id="sdStatus" class="sam-status"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Segment (SAM)</div>
+        <div class="toggle-row">
+          <span class="toggle-label">Enable SAM</span>
+          <label class="toggle">
+            <input type="checkbox" id="togSam"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="param-row">
+          <label>Opacity</label>
+          <input type="range" id="samOpacity" min="0" max="1" step=".05" value="0.3"/>
+          <span class="val" id="samOpacityVal">0.3</span>
+        </div>
+        <div id="samStatus" class="sam-status"></div>
+        <div id="samMaskSelector" class="mask-selector">
+          <div class="mask-row">
+            <button id="btnPrevMask" class="mask-btn">◀</button>
+            <span id="samMaskLabel" class="mask-label">mask 1/3</span>
+            <button id="btnNextMask" class="mask-btn">▶</button>
+          </div>
+        </div>
+        <p class="sam-hint">Click on the webcam preview to select an object</p>
+      </div>
+
+    </aside>
+
+    <div id="viewport">
+      <canvas id="pcCanvas"></canvas>
+      <div id="lightDot"></div>
+      <div id="crosshair"></div>
+    </div>
+
+  </main>
+
+  <footer>
+    <span class="footer-tag">Depth Anything Small · <span>transformers.js</span></span>
+    <span class="footer-tag">Three.js · <span>WebGL</span></span>
+    <span class="footer-tag">Drag <span>rotate</span> · Scroll <span>zoom</span></span>
+  </footer>
+
+</div>
+
+<div id="subtitle" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(8,10,14,.82);color:#fff;font-family:monospace;font-size:14px;letter-spacing:.05em;padding:8px 20px;border-radius:4px;z-index:99999;opacity:0;transition:opacity .4s;pointer-events:none;max-width:70%;text-align:center;line-height:1.5;"></div>
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>

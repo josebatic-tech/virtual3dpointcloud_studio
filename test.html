@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>SAM Test</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #eee; padding: 20px; }
+    #log { background: #000; padding: 10px; height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px; }
+    .log-ok  { color: #0f0; }
+    .log-err { color: #f44; }
+    button { padding: 8px 16px; margin: 4px; cursor: pointer; font-family: monospace; }
+    button:disabled { opacity: .4; cursor: default; }
+    #wrap { position: relative; display: inline-block; margin-top: 12px; }
+    #img  { display: block; max-width: 640px; cursor: crosshair; }
+    #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+    #dot { position: absolute; width: 10px; height: 10px; border-radius: 50%;
+           background: #f00; transform: translate(-50%,-50%); display: none;
+           pointer-events: none; box-shadow: 0 0 0 2px #fff; }
+  </style>
+  <script type="importmap">
+  { "imports": { "@huggingface/transformers": "./node_modules/@huggingface/transformers/dist/transformers.js" } }
+  </script>
+</head>
+<body>
+
+<div id="log"></div>
+
+<div>
+  <button id="btnLoad">1. Load SAM model</button>
+  <button id="btnFile">2. Load image</button>
+  <input id="fileIn" type="file" accept="image/*" style="display:none"/>
+  <button id="btnSeg"  disabled>3. Segment (click image first)</button>
+  <button id="btnAuto" disabled>3b. Auto-detect all objects</button>
+  <span id="status" style="margin-left:12px;font-size:12px;color:#aaa"></span>
+</div>
+
+<div id="wrap">
+  <img id="img" src="" alt="load an image"/>
+  <canvas id="overlay"></canvas>
+  <div id="dot"></div>
+</div>
+
+<script type="module">
+const { SamModel, AutoProcessor, RawImage, env } = await import('@huggingface/transformers');
+env.allowLocalModels = false;
+
+const log   = document.getElementById('log');
+const status= document.getElementById('status');
+const img   = document.getElementById('img');
+const overlay=document.getElementById('overlay');
+const dot   = document.getElementById('dot');
+const wrap  = document.getElementById('wrap');
+const btnLoad=document.getElementById('btnLoad');
+const btnFile=document.getElementById('btnFile');
+const btnSeg =document.getElementById('btnSeg');
+const btnAuto=document.getElementById('btnAuto');
+const fileIn =document.getElementById('fileIn');
+
+let model = null, processor = null, clickPt = null;
+
+function print(msg, err) {
+  const p = document.createElement('p');
+  p.textContent = msg;
+  p.className = err ? 'log-err' : 'log-ok';
+  log.appendChild(p);
+  log.scrollTop = log.scrollHeight;
+  status.textContent = msg;
+}
+
+// ── 1. Load model ──────────────────────────────────────────────────────────
+btnLoad.onclick = async () => {
+  btnLoad.disabled = true;
+  try {
+    print('downloading SAM processor…');
+    processor = await AutoProcessor.from_pretrained('Xenova/slimsam-77-uniform');
+    print('processor ready');
+
+    print('downloading SAM model…');
+    model = await SamModel.from_pretrained('Xenova/slimsam-77-uniform');
+    print('model ready ✓');
+
+    if (img.src) btnAuto.disabled = false;
+  } catch(e) {
+    print('load error: ' + (e?.message || String(e)), true);
+    btnLoad.disabled = false;
+  }
+};
+
+// ── 2. Load image ──────────────────────────────────────────────────────────
+btnFile.onclick = () => fileIn.click();
+fileIn.onchange = () => {
+  const file = fileIn.files[0];
+  if (!file) return;
+  img.src = URL.createObjectURL(file);
+  img.onload = () => {
+    overlay.width  = img.naturalWidth;
+    overlay.height = img.naturalHeight;
+    overlay.style.width  = img.clientWidth  + 'px';
+    overlay.style.height = img.clientHeight + 'px';
+    clickPt = null;
+    dot.style.display = 'none';
+    btnSeg.disabled = true;
+    if (autoGenerator) btnAuto.disabled = false;
+    print('image loaded: ' + img.naturalWidth + 'x' + img.naturalHeight);
+    clearMask();
+  };
+};
+
+// ── 3. Click to set point ──────────────────────────────────────────────────
+img.addEventListener('click', (e) => {
+  const rect = img.getBoundingClientRect();
+  const sx = img.naturalWidth  / rect.width;
+  const sy = img.naturalHeight / rect.height;
+  const px = (e.clientX - rect.left) * sx;
+  const py = (e.clientY - rect.top)  * sy;
+  clickPt = [px, py];
+
+  dot.style.left = (e.clientX - rect.left) + 'px';
+  dot.style.top  = (e.clientY - rect.top)  + 'px';
+  dot.style.display = 'block';
+
+  print('point set: (' + px.toFixed(0) + ', ' + py.toFixed(0) + ')');
+  if (model && processor) btnSeg.disabled = false;
+});
+
+// ── 4. Segment ─────────────────────────────────────────────────────────────
+btnSeg.onclick = async () => {
+  if (!model || !processor || !clickPt) return;
+  btnSeg.disabled = true;
+  try {
+    print('reading image…');
+    const rawImage = await RawImage.fromURL(img.src);
+    print('image size: ' + rawImage.width + 'x' + rawImage.height);
+
+    print('running processor…');
+    const [px, py] = clickPt;
+    const inputs = await processor(rawImage, { input_points: [[[px, py]]] });
+    print('input keys: ' + Object.keys(inputs).join(', '));
+    print('input_ids shape: ' + (inputs.input_ids?.dims || inputs.pixel_values?.dims));
+
+    print('running model…');
+    const outputs = await model(inputs);
+    print('pred_masks dims: ' + outputs.pred_masks?.dims);
+    print('iou_scores: ' + Array.from(outputs.iou_scores?.data || []).map(v => v.toFixed(3)).join(', '));
+
+    print('running post_process_masks…');
+    const masks = await processor.post_process_masks(
+      outputs.pred_masks,
+      inputs.original_sizes,
+      inputs.reshaped_input_sizes,
+    );
+
+    print('masks[0] dims: ' + masks[0]?.dims);
+    print('masks[0] type: ' + masks[0]?.constructor?.name);
+
+    // Draw best mask (highest IOU score)
+    const scores = Array.from(outputs.iou_scores?.data || [0]);
+    const bestIdx = scores.indexOf(Math.max(...scores));
+    print('best mask index: ' + bestIdx + ' (score ' + scores[bestIdx]?.toFixed(3) + ')');
+
+    drawMask(masks[0], bestIdx);
+    print('done ✓');
+  } catch(e) {
+    print('segment error: ' + (e?.message || String(e)), true);
+    console.error(e);
+  }
+  btnSeg.disabled = false;
+};
+
+// ── Auto-detect: 3×3 grid scan ────────────────────────────────────────────
+const PALETTE = [
+  [255,80,80],[80,255,80],[80,80,255],[255,220,40],[255,80,220],[40,220,255],
+  [255,140,40],[140,255,40],[40,140,255],[200,80,255],[80,255,180],[255,180,80],
+];
+
+btnAuto.onclick = async () => {
+  if (!model || !processor || !img.src) return;
+  btnAuto.disabled = true;
+  btnSeg.disabled = true;
+  clearMask();
+
+  try {
+    const W = img.naturalWidth, H = img.naturalHeight;
+    print('loading image for grid scan…');
+    const rawImage = await RawImage.fromURL(img.src);
+
+    const GRID = 3;
+    const results = [];
+
+    for (let row = 0; row < GRID; row++) {
+      for (let col = 0; col < GRID; col++) {
+        const px = ((col + 0.5) / GRID) * W;
+        const py = ((row + 0.5) / GRID) * H;
+        print('scanning point ' + (row * GRID + col + 1) + '/' + (GRID * GRID) +
+              ' (' + px.toFixed(0) + ',' + py.toFixed(0) + ')…');
+
+        const inputs = await processor(rawImage, { input_points: [[[px, py]]] });
+        const outputs = await model(inputs);
+        const masks = await processor.post_process_masks(
+          outputs.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes,
+        );
+
+        const scores = Array.from(outputs.iou_scores?.data || [0, 0, 0]);
+        const bestIdx = scores.indexOf(Math.max(...scores));
+        const bestScore = scores[bestIdx];
+
+        results.push({ tensor: masks[0], maskIdx: bestIdx, score: bestScore });
+        print('  → score ' + bestScore.toFixed(3));
+      }
+    }
+
+    // Paint all masks, best score first, skip very low scores
+    const ctx = overlay.getContext('2d');
+    const oW = overlay.width, oH = overlay.height;
+    const imgData = ctx.createImageData(oW, oH);
+
+    results
+      .filter(r => r.score > 0.5)
+      .sort((a, b) => b.score - a.score)
+      .forEach(({ tensor, maskIdx, score }, ci) => {
+        const [r, g, b] = PALETTE[ci % PALETTE.length];
+        const d = tensor.dims;
+        // Shape [1,3,H,W] or [3,H,W]
+        const mN = d.length === 4 ? d[1] : d[0];
+        const mH = d.length === 4 ? d[2] : d[1];
+        const mW = d.length === 4 ? d[3] : d[2];
+        const idx = Math.min(maskIdx, mN - 1);
+        const offset = idx * mH * mW;
+        const data = tensor.data;
+
+        for (let y = 0; y < oH; y++) {
+          for (let x = 0; x < oW; x++) {
+            const mx = Math.floor((x / oW) * mW);
+            const my = Math.floor((y / oH) * mH);
+            if (data[offset + my * mW + mx] > 0.5) {
+              const i = (y * oW + x) * 4;
+              imgData.data[i]   = r;
+              imgData.data[i+1] = g;
+              imgData.data[i+2] = b;
+              imgData.data[i+3] = 150;
+            }
+          }
+        }
+        print('painted mask ' + (ci+1) + ' score=' + score.toFixed(3));
+      });
+
+    ctx.putImageData(imgData, 0, 0);
+    print('grid scan done ✓');
+  } catch(e) {
+    print('auto error: ' + (e?.message || String(e)), true);
+    console.error(e);
+  }
+  btnAuto.disabled = false;
+  if (clickPt) btnSeg.disabled = false;
+};
+
+function drawMask(tensor, idx) {
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+  // Inspect tensor structure
+  print('tensor dims: ' + JSON.stringify(tensor?.dims));
+  print('tensor data length: ' + tensor?.data?.length);
+
+  let maskData, mH, mW;
+
+  if (tensor?.dims?.length === 4) {
+    // Shape [batch=1, num_masks, H, W]
+    mH = tensor.dims[2];
+    mW = tensor.dims[3];
+    const offset = idx * mH * mW;
+    maskData = tensor.data.slice(offset, offset + mH * mW);
+    print('4D tensor: mask ' + idx + ' offset=' + offset + ' size=' + mH + 'x' + mW);
+  } else if (tensor?.dims?.length === 3) {
+    // Shape [num_masks, H, W]
+    mH = tensor.dims[1];
+    mW = tensor.dims[2];
+    const offset = idx * mH * mW;
+    maskData = tensor.data.slice(offset, offset + mH * mW);
+    print('3D tensor: mask ' + idx + ' offset=' + offset + ' size=' + mH + 'x' + mW);
+  } else if (tensor?.dims?.length === 2) {
+    // Shape [H, W]
+    mH = tensor.dims[0];
+    mW = tensor.dims[1];
+    maskData = tensor.data;
+    print('2D tensor: size=' + mH + 'x' + mW);
+  } else {
+    print('unexpected tensor shape: ' + JSON.stringify(tensor?.dims), true);
+    return;
+  }
+
+  // Sample values
+  const sample = Array.from(maskData.slice(0, 10)).map(v => v.toFixed(3));
+  print('mask sample values: ' + sample.join(', '));
+
+  const W = overlay.width, H = overlay.height;
+  const imgData = ctx.createImageData(W, H);
+
+  let insideCount = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const mx = Math.floor((x / W) * mW);
+      const my = Math.floor((y / H) * mH);
+      const val = maskData[my * mW + mx];
+      const inside = val > 0.5;
+      if (inside) insideCount++;
+      const i = (y * W + x) * 4;
+      imgData.data[i]   = inside ? 0   : 0;
+      imgData.data[i+1] = inside ? 255 : 0;
+      imgData.data[i+2] = inside ? 100 : 0;
+      imgData.data[i+3] = inside ? 120 : 0;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  print('mask painted — ' + insideCount + ' inside pixels (' + ((insideCount/(W*H))*100).toFixed(1) + '%)');
+}
+
+function clearMask() {
+  const ctx = overlay.getContext('2d');
+  if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+}
+</script>
+</body>
+</html>
