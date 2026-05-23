@@ -5,9 +5,11 @@ import { renderWithPostProcessing } from './postprocessing.js';
 export function startRenderLoop() {
   let frameCount = 0;
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-  const FPS_CAP = isMobile ? 15 : 40;
+  const FPS_CAP = isMobile ? 10 : 40;
   const frameTime = 1000 / FPS_CAP;
   let lastFrameTime = performance.now();
+
+  if (isMobile) console.log('📱 Mobile mode: 10fps rendering');
 
   function loop() {
     requestAnimationFrame(loop);

@@ -20,14 +20,18 @@ export function setStatus(msg, cls) {
 
 
 export function initUI() {
-  // Mobile optimization: set better defaults for performance
+  // Mobile optimization: aggressive performance settings
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
   if (isMobile) {
-    // Higher density value = fewer points rendered = faster
-    set('density', 8);
+    // Ultra-low density on mobile = far fewer points rendered = faster
+    set('density', 10);
     // Disable particles by default on mobile (null = no particles)
     set('particleType', null);
-    console.log('📱 Mobile optimizations enabled: density=8, particles disabled');
+    // Reduce point size for mobile
+    set('ptSize', 1);
+    // Disable autorotate by default
+    set('autoRotate', false);
+    console.log('📱 Mobile: density=10, ptSize=1, particles OFF, autoRotate OFF');
   }
 
   const btnStart = getElem(DOM.BTN_START);
@@ -206,17 +210,23 @@ export function initUI() {
 
       (async function loop() {
         const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-        const FPS_TARGET = isMobile ? 15 : 30;
+        const FPS_TARGET = isMobile ? 8 : 30;
         const frameTime = 1000 / FPS_TARGET;
+        if (isMobile) console.log('📱 Mobile depth: 8fps, skip every other frame');
         let lastDepthTime = 0;
+        let frameSkip = 0;
         while (get('isRunning')) {
           const now = performance.now();
           if (now - lastDepthTime >= frameTime) {
-            if (useZed) {
-              await zedClient.runZedFrame();
-            } else {
-              await runDepthFrame();
+            // On mobile, skip every other frame for extra performance
+            if (!isMobile || frameSkip % 2 === 0) {
+              if (useZed) {
+                await zedClient.runZedFrame();
+              } else {
+                await runDepthFrame();
+              }
             }
+            frameSkip++;
             lastDepthTime = now;
           }
           await new Promise(r => requestAnimationFrame(r));

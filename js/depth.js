@@ -225,14 +225,14 @@ export async function startCamera(deviceId = null) {
       throw new Error('iOS requires HTTPS. Please use an HTTPS URL or localhost.');
     }
 
-    // Mobile-optimized constraints
+    // Mobile-optimized constraints - ultra low res for performance
     const constraints = {
       video: {
         width: isMobile
-          ? { ideal: 480 }  // Further reduced for performance
+          ? { ideal: 360 }  // Ultra low for mobile
           : { ideal: res.width },
         height: isMobile
-          ? { ideal: 360 }
+          ? { ideal: 240 }
           : { ideal: res.height },
         facingMode: 'user', // Front camera on mobile
       },
