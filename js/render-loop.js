@@ -4,8 +4,18 @@ import { renderWithPostProcessing } from './postprocessing.js';
 
 export function startRenderLoop() {
   let frameCount = 0;
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  const FPS_CAP = isMobile ? 15 : 40;
+  const frameTime = 1000 / FPS_CAP;
+  let lastFrameTime = performance.now();
+
   function loop() {
     requestAnimationFrame(loop);
+    const now = performance.now();
+    const dt = now - lastFrameTime;
+
+    if (dt < frameTime) return;
+    lastFrameTime = now - (dt - frameTime);
     frameCount++;
     if (frameCount <= 5) console.log('render frame', frameCount, 'renderer:', !!ref('renderer'), 'scene:', !!ref('scene'), 'camera:', !!ref('camera'));
 
@@ -50,6 +60,12 @@ export function startRenderLoop() {
     if (points) {
       points.rotation.x = ref('rotX');
       points.rotation.y = ref('rotY');
+    }
+
+    const mesh = ref('mesh');
+    if (mesh) {
+      mesh.rotation.x = ref('rotX');
+      mesh.rotation.y = ref('rotY');
     }
 
     const grid = ref('grid');

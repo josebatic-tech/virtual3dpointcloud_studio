@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { get, set, setRef, ref } from './store.js';
 import { DOM } from './constants.js';
 import { startRenderLoop } from './render-loop.js';
+import { initInteractiveLights, updateLightPosition } from './interactive-lights.js';
 
 export function initThree() {
   console.log('initThree called');
@@ -20,6 +21,7 @@ export function initThree() {
   setRef('scene', sc);
   setRef('camera', cam);
   setRef('renderer', ren);
+  initInteractiveLights();
 
   new ResizeObserver(() => {
     ren.setSize(canvas.clientWidth, canvas.clientHeight);
@@ -40,6 +42,93 @@ export function initThree() {
 }
 
 function _initInteraction(canvas) {
+  const toggleFullscreen = async () => {
+    try {
+      const isIOS = /iPhone|iPad/.test(navigator.userAgent);
+      const isFullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+
+      if (!isFullscreenElement) {
+        // Try standard fullscreen first
+        try {
+          if (canvas.requestFullscreen) {
+            await canvas.requestFullscreen();
+          } else if (canvas.webkitRequestFullscreen) {
+            await canvas.webkitRequestFullscreen();
+          } else if (canvas.mozRequestFullScreen) {
+            await canvas.mozRequestFullScreen();
+          } else if (canvas.msRequestFullscreen) {
+            await canvas.msRequestFullscreen();
+          } else if (isIOS) {
+            // iOS fallback: hide sidebar and expand canvas
+            _iosFullscreenMode(true);
+          }
+        } catch (err) {
+          if (isIOS) {
+            _iosFullscreenMode(true);
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          await document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+          await document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+          await document.msExitFullscreen();
+        } else if (isIOS) {
+          _iosFullscreenMode(false);
+        }
+      }
+    } catch (err) {
+      console.warn('Fullscreen toggle failed:', err);
+    }
+  };
+
+  const _iosFullscreenMode = (enable) => {
+    const sidebar = document.getElementById('sidebar');
+    const header = document.querySelector('header');
+    const main = document.querySelector('main');
+    const viewport = document.getElementById('viewport');
+
+    if (enable) {
+      setRef('wasFullscreenIOS', true);
+      if (sidebar) sidebar.style.display = 'none';
+      if (header) header.style.display = 'none';
+      if (main) {
+        main.style.gridTemplateColumns = '1fr';
+        main.style.height = '100vh';
+      }
+      if (viewport) {
+        viewport.style.width = '100vw';
+        viewport.style.height = '100vh';
+      }
+      canvas.style.width = '100vw';
+      canvas.style.height = '100vh';
+      document.body.style.overflow = 'hidden';
+    } else {
+      setRef('wasFullscreenIOS', false);
+      if (sidebar) sidebar.style.display = '';
+      if (header) header.style.display = '';
+      if (main) {
+        main.style.gridTemplateColumns = '';
+        main.style.height = '';
+      }
+      if (viewport) {
+        viewport.style.width = '';
+        viewport.style.height = '';
+      }
+      canvas.style.width = '';
+      canvas.style.height = '';
+      document.body.style.overflow = '';
+    }
+  };
+
+  setRef('toggleFullscreen', toggleFullscreen);
+
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     setRef('isDragging', true);
@@ -47,16 +136,23 @@ function _initInteraction(canvas) {
     setRef('lastY', e.clientY);
   });
 
+  canvas.addEventListener('dblclick', toggleFullscreen);
+
   window.addEventListener('mouseup', () => setRef('isDragging', false));
 
   canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    if (get('interactiveLightMode')) {
+      updateLightPosition(nx, ny);
+    }
+
     if (get('relightOn')) {
       const dot = document.getElementById(DOM.LIGHT_DOT);
-      const rect = canvas.getBoundingClientRect();
       dot.style.left = e.clientX - rect.left + 'px';
       dot.style.top = e.clientY - rect.top + 'px';
-      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       set('lightPos', { x: nx * 3, y: ny * 2, z: 2.5 });
     }
 
@@ -79,6 +175,16 @@ function _initInteraction(canvas) {
   const keys = {};
   window.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+    if (e.key === 'Escape') {
+      const isIOS = /iPhone|iPad/.test(navigator.userAgent);
+      if (isIOS && ref('wasFullscreenIOS')) {
+        _iosFullscreenMode(false);
+      }
+    }
   });
   window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;

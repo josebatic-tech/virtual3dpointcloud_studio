@@ -4,12 +4,15 @@ import { getElem, setText } from './utils.js';
 import { initThree } from './three-init.js';
 import { buildEnv } from './environment.js';
 import { rebuildGeometry } from './pointcloud.js';
-import { loadDepthModel, runDepthFrame, startCamera, stopCamera, getAvailableCameras } from './depth.js';
-import { loadDescribeModel, describeScene, setDescribeMode } from './describe.js';
+import { rebuildGeometry as rebuildMeshGeometry } from './mesh.js';
+import { loadDepthModel, runDepthFrame, startCamera, stopCamera, getAvailableCameras, isZedDevice, stopZed } from './depth.js';
+import { describeViaVLM } from './describe.js';
 import { loadSAMModel, handlePreviewClick, selectSAMMask } from './sam.js';
 import { initStreamDiffusion } from './streamdiffusion.js';
 import { initDirectorTools } from './director.js';
 import { initPostProcessing } from './postprocessing.js';
+import { setLightIntensity, setAmbientIntensity, setLightColor, toggleInteractiveMode } from './interactive-lights.js';
+import * as zedClient from './zed.js';
 
 export function setStatus(msg, cls) {
   setText(DOM.STATUS, msg, cls);
@@ -21,17 +24,16 @@ export function initUI() {
   const btnDepth = getElem(DOM.BTN_DEPTH);
   const btnStop = getElem(DOM.BTN_STOP);
   const btnRotate = getElem(DOM.BTN_ROTATE);
-  const btnDescribe = getElem(DOM.BTN_DESCRIBE);
   const video = getElem(DOM.VIDEO);
-  const btnModeFlorence = document.getElementById('btnModeFlorence');
-  const btnModeVLM = document.getElementById('btnModeVLM');
-  const hfTokenRow = document.getElementById('hfTokenRow');
   const btnViewPointCloud = document.getElementById('btnViewPointCloud');
   const btnViewCamera = document.getElementById('btnViewCamera');
   const deviceSelector = document.getElementById('cameraDevice');
   const deviceSelectorRow = document.getElementById('deviceSelectorRow');
+  const zedRow = document.getElementById('zedRow');
+  const btnZedConnect = getElem(DOM.BTN_ZED_CONNECT);
 
   let wasDepthRunning = false;
+  let hasZedDevice = false;
 
   // Load available cameras
   async function loadCameraDevices() {
@@ -39,6 +41,10 @@ export function initUI() {
     if (cameras.length > 1) {
       deviceSelectorRow.style.display = 'flex';
       deviceSelector.innerHTML = '<option value="">— select camera —</option>';
+
+      // Check if any device is Zed
+      hasZedDevice = cameras.some((cam) => isZedDevice(cam.label));
+
       cameras.forEach((cam, idx) => {
         const opt = document.createElement('option');
         opt.value = cam.deviceId;
@@ -46,9 +52,48 @@ export function initUI() {
         deviceSelector.appendChild(opt);
       });
     }
+    updateZedRowVisibility();
+  }
+
+  function updateZedRowVisibility() {
+    if (zedRow && deviceSelector.value) {
+      const selectedDevice = Array.from(deviceSelector.options).find((opt) => opt.value === deviceSelector.value);
+      const deviceLabel = selectedDevice ? selectedDevice.textContent : '';
+      zedRow.style.display = isZedDevice(deviceLabel) ? 'flex' : 'none';
+    } else if (zedRow) {
+      zedRow.style.display = 'none';
+    }
   }
 
   loadCameraDevices();
+
+  // Resolution selector
+  const resolutionSelector = document.getElementById('cameraResolution');
+  if (resolutionSelector) {
+    resolutionSelector.value = get('cameraRes') || '360p';
+    resolutionSelector.onchange = async () => {
+      set('cameraRes', resolutionSelector.value);
+      if (get('stream')) {
+        try {
+          const wasRunning = get('isRunning');
+          if (wasRunning) {
+            set('isRunning', false);
+            btnDepth.textContent = '◈ Estimate Depth';
+            btnDepth.classList.remove('active');
+          }
+          stopCamera();
+          const selectedDeviceId = deviceSelector.value || null;
+          await startCamera(selectedDeviceId);
+          set('stream', get('stream'));
+          if (wasRunning) {
+            btnDepth.click();
+          }
+        } catch (e) {
+          setStatus('resolution change error: ' + e.message, 'error');
+        }
+      }
+    };
+  }
 
   btnStart.onclick = async () => {
     try {
@@ -57,11 +102,14 @@ export function initUI() {
       btnStart.disabled = true;
       btnDepth.disabled = false;
       btnStop.disabled = false;
-      btnDescribe.disabled = false;
       setStatus('camera active — click estimate depth');
       initThree();
       initPostProcessing();
       buildEnv();
+      rebuildGeometry();
+      rebuildMeshGeometry();
+      const mesh = ref('mesh');
+      if (mesh) mesh.visible = false;
     } catch (e) {
       setStatus('camera error: ' + e.message, 'error');
     }
@@ -70,6 +118,7 @@ export function initUI() {
   // Allow switching cameras without stopping
   if (deviceSelector) {
     deviceSelector.onchange = async () => {
+      updateZedRowVisibility();
       if (get('stream')) {
         try {
           const selectedDeviceId = deviceSelector.value || null;
@@ -80,6 +129,11 @@ export function initUI() {
             btnDepth.classList.remove('active');
           }
           stopCamera();
+          stopZed();
+          if (btnZedConnect) {
+            btnZedConnect.textContent = '⬡ Connect';
+            btnZedConnect.classList.remove('active');
+          }
           await startCamera(selectedDeviceId);
           set('stream', get('stream'));
           if (wasRunning) {
@@ -88,6 +142,30 @@ export function initUI() {
         } catch (e) {
           setStatus('camera switch error: ' + e.message, 'error');
           loadCameraDevices();
+        }
+      }
+    };
+  }
+
+  // Zed 2 connect button
+  if (btnZedConnect) {
+    btnZedConnect.onclick = async () => {
+      if (zedClient.isZedConnected()) {
+        zedClient.disconnectZed();
+        btnZedConnect.textContent = '⬡ Connect';
+        btnZedConnect.classList.remove('active');
+        setStatus('Zed disconnected');
+      } else {
+        btnZedConnect.disabled = true;
+        try {
+          await zedClient.connectZed((msg) => setStatus(msg));
+          btnZedConnect.textContent = '⬡ Connected';
+          btnZedConnect.classList.add('active');
+          btnZedConnect.disabled = false;
+        } catch (e) {
+          setStatus('Zed connection failed: ' + e.message, 'error');
+          btnZedConnect.disabled = false;
+          btnZedConnect.textContent = '⬡ Connect';
         }
       }
     };
@@ -104,14 +182,33 @@ export function initUI() {
 
     btnDepth.disabled = true;
     try {
-      if (!get('depthPipe')) set('depthPipe', await loadDepthModel((msg) => setText(DOM.STATUS, msg)));
+      // Check if Zed is connected
+      const useZed = zedClient.isZedConnected();
+
+      if (!useZed && !get('depthPipe')) {
+        set('depthPipe', await loadDepthModel((msg) => setText(DOM.STATUS, msg)));
+      }
+
       set('isRunning', true);
       btnDepth.disabled = false;
       btnDepth.textContent = '⏸ Pause';
       btnDepth.classList.add('active');
+
       (async function loop() {
+        const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+        const FPS_TARGET = isMobile ? 15 : 30;
+        const frameTime = 1000 / FPS_TARGET;
+        let lastDepthTime = 0;
         while (get('isRunning')) {
-          await runDepthFrame();
+          const now = performance.now();
+          if (now - lastDepthTime >= frameTime) {
+            if (useZed) {
+              await zedClient.runZedFrame();
+            } else {
+              await runDepthFrame();
+            }
+            lastDepthTime = now;
+          }
           await new Promise(r => requestAnimationFrame(r));
         }
       })();
@@ -123,12 +220,16 @@ export function initUI() {
 
   btnStop.onclick = () => {
     stopCamera();
+    stopZed();
     btnStart.disabled = false;
     btnDepth.disabled = true;
     btnStop.disabled = true;
-    btnDescribe.disabled = true;
     btnDepth.classList.remove('active');
     btnDepth.textContent = '◈ Estimate Depth';
+    if (btnZedConnect) {
+      btnZedConnect.textContent = '⬡ Connect';
+      btnZedConnect.classList.remove('active');
+    }
     setStatus('stopped');
   };
 
@@ -139,19 +240,37 @@ export function initUI() {
     btnRotate.textContent = next ? '↻ On' : '↻ Off';
   };
 
-  // Describe mode toggle
-  if (btnModeFlorence && btnModeVLM) {
-    btnModeFlorence.onclick = () => {
-      setDescribeMode('florence');
-      btnModeFlorence.classList.add('active');
-      btnModeVLM.classList.remove('active');
-      hfTokenRow.style.display = 'flex';
+  // Mesh mode toggle
+  const btnMeshMode = getElem(DOM.BTN_MESH_MODE);
+  if (btnMeshMode) {
+    btnMeshMode.onclick = () => {
+      const isMesh = get('meshMode');
+      set('meshMode', !isMesh);
+      btnMeshMode.textContent = !isMesh ? '△ Mesh' : '☁ Cloud';
+      btnMeshMode.classList.toggle('active', !isMesh);
+
+      const points = ref('points');
+      const mesh = ref('mesh');
+      if (!isMesh) {
+        if (mesh) mesh.visible = true;
+        if (points) points.visible = false;
+        if (get('isRunning')) rebuildMeshGeometry();
+      } else {
+        if (points) points.visible = true;
+        if (mesh) mesh.visible = false;
+        if (get('isRunning')) rebuildGeometry();
+      }
     };
-    btnModeVLM.onclick = () => {
-      setDescribeMode('vlm');
-      btnModeVLM.classList.add('active');
-      btnModeFlorence.classList.remove('active');
-      hfTokenRow.style.display = 'none';
+  }
+
+  // Interactive lighting toggle
+  const btnInteractiveLight = getElem(DOM.BTN_INTERACTIVE_LIGHT);
+  if (btnInteractiveLight) {
+    btnInteractiveLight.onclick = () => {
+      const isEnabled = get('interactiveLightMode');
+      toggleInteractiveMode(!isEnabled);
+      btnInteractiveLight.classList.toggle('active', !isEnabled);
+      btnInteractiveLight.textContent = !isEnabled ? '💡 On' : '💡 Off';
     };
   }
 
@@ -160,18 +279,19 @@ export function initUI() {
     btnViewPointCloud.onclick = () => {
       console.log('Switching to 3D Cloud view');
       const canvas = document.getElementById('pcCanvas');
-      const previewWebcam = document.getElementById('previewWebcam');
+      const videoContainer = document.getElementById('cameraViewContainer');
 
-      // Start 3D view fade-in while camera fades out (crossfade blend)
+      // Show canvas, hide camera view
       canvas.style.display = 'block';
-      canvas.style.opacity = '0';
+      canvas.style.opacity = '1';
       canvas.style.pointerEvents = 'auto';
       canvas.classList.remove('hidden');
 
-      // Prepare canvas but keep it invisible
-      const dummy = canvas.offsetWidth;
+      if (videoContainer) {
+        videoContainer.style.display = 'none';
+      }
 
-      // Force renderer resize immediately
+      // Force renderer resize
       const renderer = ref('renderer');
       const camera = ref('camera');
       const scene = ref('scene');
@@ -185,54 +305,41 @@ export function initUI() {
         renderer.render(scene, camera);
       }
 
-      // Blend: fade out camera while fading in 3D (parallel, not sequential)
-      if (previewWebcam) {
-        previewWebcam.classList.remove('fullscreen-video');
-        previewWebcam.style.transition = 'opacity 0.5s ease-in-out';
-        previewWebcam.style.opacity = '0';
-      }
-      video.classList.remove('fullscreen');
-
       btnViewPointCloud.classList.add('active');
       btnViewCamera.classList.remove('active');
 
-      // Trigger crossfade blend for canvas
-      canvas.style.transition = 'opacity 0.5s ease-in-out';
-      canvas.style.opacity = '1';
-
-      // Resume depth after blend completes
+      // Resume depth after switch
       if (wasDepthRunning && !get('isRunning')) {
-        setTimeout(() => btnDepth.click(), 500);
+        setTimeout(() => btnDepth.click(), 300);
       }
     };
 
     btnViewCamera.onclick = () => {
       console.log('Switching to Camera view');
       const canvas = document.getElementById('pcCanvas');
-      const previewWebcam = document.getElementById('previewWebcam');
+      const videoContainer = document.getElementById('cameraViewContainer');
+      const cameraViewVideo = document.getElementById('cameraViewVideo');
+      const sidebarVideo = document.getElementById('video');
 
-      // Immediately disable canvas interaction
+      // Hide canvas, show camera view
+      canvas.style.display = 'none';
       canvas.style.pointerEvents = 'none';
+      canvas.classList.add('hidden');
 
-      // Blend: fade out 3D while fading in camera (crossfade blend)
-      if (previewWebcam) {
-        previewWebcam.classList.add('fullscreen-video');
-        previewWebcam.style.transition = 'opacity 0.5s ease-in-out';
-        previewWebcam.style.opacity = '1';
+      if (videoContainer) {
+        videoContainer.style.display = 'flex';
+        videoContainer.style.alignItems = 'center';
+        videoContainer.style.justifyContent = 'center';
       }
-      video.classList.add('fullscreen');
+
+      // Clone the stream to the camera view video element if available
+      if (cameraViewVideo && sidebarVideo && sidebarVideo.srcObject) {
+        cameraViewVideo.srcObject = sidebarVideo.srcObject;
+      }
 
       btnViewCamera.classList.add('active');
+
       btnViewPointCloud.classList.remove('active');
-
-      // Trigger crossfade blend for canvas
-      canvas.style.transition = 'opacity 0.5s ease-in-out';
-      canvas.style.opacity = '0';
-
-      // Hide canvas after blend completes
-      setTimeout(() => {
-        canvas.classList.add('hidden');
-      }, 500);
 
       // Pause depth if it was running
       if (get('isRunning')) {
@@ -244,36 +351,16 @@ export function initUI() {
     console.warn('View buttons not found:', { btnViewPointCloud, btnViewCamera });
   }
 
-  btnDescribe.onclick = async () => {
-    const mode = btnModeFlorence?.classList.contains('active') ? 'florence' : 'vlm';
-
-    if (mode === 'florence' && !get('describeLoaded')) {
-      btnDescribe.disabled = true;
-      btnDescribe.textContent = 'loading…';
-      try {
-        await loadDescribeModel((msg) => { btnDescribe.textContent = msg; });
-      } catch (e) {
-        setStatus('describe error: ' + (e?.message || String(e)), 'error');
-        btnDescribe.disabled = false;
-        btnDescribe.textContent = '◈ Describe Scene';
-        return;
+  // Fullscreen button
+  const btnFullscreen = document.getElementById(DOM.BTN_FULLSCREEN);
+  if (btnFullscreen) {
+    btnFullscreen.onclick = () => {
+      const toggleFullscreen = ref('toggleFullscreen');
+      if (toggleFullscreen) {
+        toggleFullscreen();
       }
-      btnDescribe.disabled = false;
-      btnDescribe.textContent = '◈ Describe Scene';
-    }
-
-    btnDescribe.disabled = true;
-    btnDescribe.textContent = 'describing…';
-    try {
-      const text = await describeScene();
-      getElem(DOM.DESC_OUTPUT).textContent = text || '(no description)';
-      showSubtitle(text || '(no description)');
-    } catch (e) {
-      getElem(DOM.DESC_OUTPUT).textContent = 'error: ' + (e?.message || String(e));
-    }
-    btnDescribe.disabled = false;
-    btnDescribe.textContent = '◈ Describe Scene';
-  };
+    };
+  }
 
   video.addEventListener('click', handlePreviewClick);
 
@@ -283,7 +370,18 @@ export function initUI() {
     const p = ref('points');
     if (p) p.material.size = v;
   });
-  bindSlider('density', (v) => { set('density', v); rebuildGeometry(); });
+  bindSlider('density', (v) => {
+    set('density', v);
+    // Send density update to Zed if connected
+    if (zedClient.isZedConnected()) {
+      zedClient.sendDensityToZed(v);
+    }
+    if (get('meshMode')) {
+      rebuildMeshGeometry();
+    } else {
+      rebuildGeometry();
+    }
+  });
   bindSlider('depthScale', (v) => set('depthScale', v), true);
   bindSlider('samOpacity', (v) => set('samOpacity', v), true);
   bindSlider('camSpeed', (v) => set('camSpeed', v), true);
@@ -300,6 +398,24 @@ export function initUI() {
     const p = ref('particleSystem');
     if (p && p.material) p.material.opacity = v;
   }, true);
+
+  bindSlider('lightIntensity', (v) => {
+    set('lightIntensity', v);
+    setLightIntensity(v);
+  }, true);
+
+  bindSlider('lightAmbience', (v) => {
+    set('lightAmbience', v);
+    setAmbientIntensity(v);
+  }, true);
+
+  const lightColorInput = document.getElementById('lightColor');
+  if (lightColorInput) {
+    lightColorInput.oninput = (e) => {
+      set('lightColor', e.target.value);
+      setLightColor(e.target.value);
+    };
+  }
 
   // --- Preview toggles ---
   [DOM.TOG_WEBCAM, DOM.TOG_DEPTH, DOM.TOG_SAM_MASK].forEach((id) => {
@@ -330,29 +446,17 @@ export function initUI() {
   getElem(DOM.BTN_PREV_MASK).onclick = () => selectSAMMask(-1);
   getElem(DOM.BTN_NEXT_MASK).onclick = () => selectSAMMask(1);
 
-  // --- Light color ---
-  const lightColorInput = document.getElementById('lightColor');
-  if (lightColorInput) {
-    lightColorInput.oninput = (e) => {
-      set('lightColor', e.target.value);
-    };
-  }
-
-  const descOut = document.getElementById(DOM.DESC_OUTPUT);
-  if (descOut) descOut.textContent = '';
-
-  const hfInput = document.getElementById('hfToken');
-  if (hfInput) {
-    const saved = localStorage.getItem('hfToken');
-    if (saved) hfInput.value = saved;
-    hfInput.onchange = () => localStorage.setItem('hfToken', hfInput.value.trim());
-  }
+  // Initialize tab switching
+  initTabSwitching();
 
   // Initialize StreamDiffusion UI
   initStreamDiffusion();
 
   // Initialize Director Tools
   initDirectorTools();
+
+  // Initialize VLM Chat
+  initVLMChat();
 }
 
 function bindSlider(id, cb, isFloat) {
@@ -372,12 +476,147 @@ function bindToggle(id, cb) {
   el.onchange = () => cb(el.checked);
 }
 
-let _subtitleTimer = null;
-function showSubtitle(text) {
-  const el = document.getElementById('subtitle');
-  if (!el) return;
-  el.textContent = text;
-  el.style.opacity = '1';
-  clearTimeout(_subtitleTimer);
-  _subtitleTimer = setTimeout(() => { el.style.opacity = '0'; }, 8000);
+function initTabSwitching() {
+  const tabBar = document.getElementById('tab-bar');
+  const tabPanels = document.getElementById('tab-panels');
+
+  if (!tabBar || !tabPanels) return;
+
+  const tabBtns = Array.from(tabBar.querySelectorAll('.tab-btn'));
+
+  tabBtns.forEach((btn) => {
+    btn.onclick = () => {
+      const tabName = btn.dataset.tab;
+      if (!tabName) return;
+
+      tabBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const panels = Array.from(tabPanels.querySelectorAll('.tab-panel'));
+      panels.forEach((p) => p.classList.remove('active'));
+
+      const activePanel = document.getElementById(`tab-${tabName}`);
+      if (activePanel) activePanel.classList.add('active');
+    };
+  });
+}
+
+export function initVLMChat() {
+  const vlmInput = document.getElementById('vlmInput');
+  const btnVLMSend = document.getElementById('btnVLMSend');
+  const btnVLMClear = document.getElementById('btnVLMClear');
+  const vlmChat = document.getElementById('vlmChat');
+  const vlmSystemPrompt = document.getElementById('vlmSystemPrompt');
+  const vlmModel = document.getElementById('vlmModel');
+
+  console.log('🤖 Initializing VLM Chat...');
+  console.log('  vlmInput:', !!vlmInput);
+  console.log('  btnVLMSend:', !!btnVLMSend);
+  console.log('  vlmChat:', !!vlmChat);
+
+  if (!vlmInput || !btnVLMSend || !vlmChat) {
+    console.error('❌ VLM chat elements not found!');
+    console.error('  Missing:', {
+      vlmInput: !vlmInput,
+      btnVLMSend: !btnVLMSend,
+      vlmChat: !vlmChat
+    });
+    return;
+  }
+  console.log('✅ VLM chat elements found');
+
+  // Load history from localStorage
+  const savedHistory = localStorage.getItem('vlmHistory');
+  const history = savedHistory ? JSON.parse(savedHistory) : [];
+  set('vlmHistory', history);
+
+  // Render existing history
+  function renderHistory() {
+    vlmChat.innerHTML = '';
+    history.forEach((msg) => {
+      const div = document.createElement('div');
+      div.className = `chat-msg ${msg.role}`;
+      div.textContent = msg.content;
+      vlmChat.appendChild(div);
+    });
+    vlmChat.scrollTop = vlmChat.scrollHeight;
+  }
+  renderHistory();
+
+  async function sendMessage() {
+    const userText = vlmInput.value.trim();
+    console.log('📤 Send message:', userText);
+    console.log('   Stream ready:', !!get('stream'));
+
+    if (!userText) {
+      console.log('⚠️  Empty message, ignoring');
+      return;
+    }
+
+    if (!get('stream')) {
+      console.log('⚠️  No video stream! Start camera first.');
+      vlmInput.placeholder = 'Start camera first (Camera tab)';
+      return;
+    }
+
+    vlmInput.value = '';
+    vlmInput.disabled = true;
+    btnVLMSend.disabled = true;
+    console.log('🔄 Sending to VLM...');
+
+    const userMsg = { role: 'user', content: userText };
+    history.push(userMsg);
+
+    const div = document.createElement('div');
+    div.className = 'chat-msg user';
+    div.textContent = userText;
+    vlmChat.appendChild(div);
+
+    try {
+      const result = await describeViaVLM(userText, vlmSystemPrompt?.value || '', history);
+      if (result.error) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'chat-msg assistant';
+        errDiv.textContent = `Error: ${result.error}`;
+        vlmChat.appendChild(errDiv);
+      } else {
+        const assistantMsg = { role: 'assistant', content: result.content };
+        history.push(assistantMsg);
+
+        const respDiv = document.createElement('div');
+        respDiv.className = 'chat-msg assistant';
+        respDiv.textContent = result.content;
+        vlmChat.appendChild(respDiv);
+      }
+    } catch (e) {
+      const errDiv = document.createElement('div');
+      errDiv.className = 'chat-msg assistant';
+      errDiv.textContent = `Error: ${e.message}`;
+      vlmChat.appendChild(errDiv);
+    }
+
+    set('vlmHistory', history);
+    localStorage.setItem('vlmHistory', JSON.stringify(history));
+    vlmChat.scrollTop = vlmChat.scrollHeight;
+    vlmInput.disabled = false;
+    btnVLMSend.disabled = false;
+    vlmInput.focus();
+  }
+
+  btnVLMSend.onclick = sendMessage;
+  vlmInput.onkeypress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  if (btnVLMClear) {
+    btnVLMClear.onclick = () => {
+      history.length = 0;
+      set('vlmHistory', []);
+      localStorage.setItem('vlmHistory', '[]');
+      vlmChat.innerHTML = '';
+    };
+  }
 }
