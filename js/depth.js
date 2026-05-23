@@ -1,8 +1,11 @@
 import { get, set } from './store.js';
 import { MODELS, DEPTH } from './constants.js';
 import { DEFAULTS, DOM } from './constants.js';
+import { CAMERA_RESOLUTIONS } from './constants.js';
 import { mirrorFrame, getElem, setText } from './utils.js';
 import { rebuildGeometry, writeDepthFrame } from './pointcloud.js';
+import { rebuildGeometry as rebuildMeshGeometry, writeDepthFrame as writeMeshDepthFrame } from './mesh.js';
+import * as zedClient from './zed.js';
 
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
@@ -14,16 +17,71 @@ export async function loadDepthModel(onStatus) {
   const { pipeline, env } = await import('@huggingface/transformers');
   env.allowLocalModels = false;
 
-  // Prefer WebGPU — same quantized model file, faster backend
-  let device = DEPTH.DEVICE;
+  // Prefer high-performance GPU (NVIDIA/dedicated) via WebGPU
+  let device = 'wasm';
   const dtype = DEPTH.VERSION;
+
+  console.log('WebGPU available:', !!navigator.gpu);
+
   try {
     if (navigator.gpu) {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter) device = 'webgpu';
+      // Try to get all adapters and find NVIDIA
+      console.log('Enumerating adapters...');
+      let adapter = null;
+
+      // First try to get NVIDIA discrete GPU
+      try {
+        adapter = await navigator.gpu.requestAdapter({
+          powerPreference: 'high-performance',
+          forceFallbackAdapter: false
+        });
+        const info = adapter?.info || {};
+        console.log('High-performance adapter:', info);
+
+        // Check if it's NVIDIA
+        if (info.vendor && info.vendor.toLowerCase().includes('nvidia')) {
+          device = 'webgpu';
+          onStatus(`loading depth model (WebGPU - NVIDIA ${info.description})…`);
+          console.log('Using NVIDIA GPU');
+        } else {
+          // Not NVIDIA, try requesting with no preferences
+          console.log('Not NVIDIA, trying alternative...');
+          adapter = await navigator.gpu.requestAdapter();
+          const altInfo = adapter?.info || {};
+          console.log('Alternative adapter:', altInfo);
+
+          if (altInfo.vendor && altInfo.vendor.toLowerCase().includes('nvidia')) {
+            device = 'webgpu';
+            onStatus(`loading depth model (WebGPU - NVIDIA ${altInfo.description})…`);
+            console.log('Using NVIDIA GPU (alternative)');
+          } else {
+            device = 'webgpu';
+            onStatus(`loading depth model (WebGPU - ${altInfo.vendor || 'GPU'})…`);
+            console.log('Using available GPU:', altInfo.vendor);
+          }
+        }
+      } catch (e) {
+        console.error('Adapter enumeration error:', e);
+        adapter = await navigator.gpu.requestAdapter();
+        const info = adapter?.info || {};
+        device = 'webgpu';
+        onStatus(`loading depth model (WebGPU - ${info.vendor || 'GPU'})…`);
+      }
+
+      if (!adapter) {
+        console.log('No adapter found, using WASM');
+        device = 'wasm';
+        onStatus('loading depth model (wasm)…');
+      }
+    } else {
+      console.log('navigator.gpu not available');
+      onStatus('loading depth model (wasm)…');
     }
-  } catch (_) {}
-  onStatus('loading depth model (' + device + ')…');
+  } catch (e) {
+    console.error('WebGPU error:', e);
+    device = 'wasm';
+    onStatus('loading depth model (wasm)…');
+  }
 
   let lastPct = -1;
   const progressCb = (e) => {
@@ -38,9 +96,13 @@ export async function loadDepthModel(onStatus) {
 
   let pipe;
   try {
+    console.log('Loading pipeline with device:', device);
     pipe = await pipeline('depth-estimation', MODELS.DEPTH, { device, dtype, progress_callback: progressCb });
+    console.log('Pipeline loaded successfully with device:', device);
   } catch (gpuErr) {
+    console.error('Pipeline load error:', gpuErr);
     if (device === 'webgpu') {
+      console.log('WebGPU failed, falling back to wasm…');
       onStatus('WebGPU failed, falling back to wasm…');
       pipe = await pipeline('depth-estimation', MODELS.DEPTH, { device: 'wasm', dtype, progress_callback: progressCb });
       device = 'wasm';
@@ -50,6 +112,7 @@ export async function loadDepthModel(onStatus) {
   }
 
   onStatus('depth model ready (' + device + ')');
+  console.log('Depth model ready with device:', device);
   return pipe;
 }
 
@@ -106,12 +169,20 @@ export async function runDepthFrame() {
       _prevW = W;
       _prevH = H;
       console.log('rebuilding geometry');
-      rebuildGeometry();
+      if (get('meshMode')) {
+        rebuildMeshGeometry();
+      } else {
+        rebuildGeometry();
+      }
     }
 
     const videoFrame = offCtx.getImageData(0, 0, W, H).data;
     console.log('videoFrame length:', videoFrame.length, 'WxH:', W, 'x', H);
-    writeDepthFrame(depthFlat, get('depthW'), get('depthH'), videoFrame);
+    if (get('meshMode')) {
+      writeMeshDepthFrame(depthFlat, get('depthW'), get('depthH'), videoFrame);
+    } else {
+      writeDepthFrame(depthFlat, get('depthW'), get('depthH'), videoFrame);
+    }
 
     setText(DOM.STATUS, W + '×' + H + ' pts — running', 'running');
   } catch (e) {
@@ -130,20 +201,80 @@ export async function getAvailableCameras() {
   }
 }
 
+export function isZedDevice(cameraLabel) {
+  return cameraLabel && cameraLabel.toUpperCase().includes('ZED');
+}
+
+export async function stopZed() {
+  zedClient.disconnectZed();
+}
+
 export async function startCamera(deviceId = null) {
-  const constraints = {
-    video: { width: { ideal: DEFAULTS.VIDEO_WIDTH }, height: { ideal: DEFAULTS.VIDEO_HEIGHT } },
-    audio: false,
-  };
+  try {
+    const resKey = get('cameraRes') || DEFAULTS.CAMERA_RES;
+    const res = CAMERA_RESOLUTIONS[resKey];
 
-  if (deviceId) {
-    constraints.video.deviceId = { exact: deviceId };
+    // Detect if mobile (iOS/Android)
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad/.test(navigator.userAgent);
+
+    // Check if HTTPS or localhost (required for camera on iOS)
+    const isSecureContext = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isIOS && !isSecureContext) {
+      console.warn('⚠️  iOS requires HTTPS for camera access. Current URL is HTTP.');
+      throw new Error('iOS requires HTTPS. Please use an HTTPS URL or localhost.');
+    }
+
+    // Mobile-optimized constraints
+    const constraints = {
+      video: {
+        width: isMobile
+          ? { ideal: 480 }  // Further reduced for performance
+          : { ideal: res.width },
+        height: isMobile
+          ? { ideal: 360 }
+          : { ideal: res.height },
+        facingMode: 'user', // Front camera on mobile
+      },
+      audio: false,
+    };
+
+    if (deviceId) {
+      constraints.video.deviceId = { exact: deviceId };
+    }
+
+    console.log('📱 Camera constraints:', { isMobile, isIOS, constraints });
+
+    try {
+      set('stream', await navigator.mediaDevices.getUserMedia(constraints));
+    } catch (permissionError) {
+      console.error('❌ Camera permission denied:', permissionError.name);
+      if (permissionError.name === 'NotAllowedError') {
+        throw new Error('Camera permission denied. Please allow camera access in browser settings.');
+      } else if (permissionError.name === 'NotFoundError') {
+        throw new Error('No camera found on this device.');
+      } else if (permissionError.name === 'NotSupportedError') {
+        throw new Error('Camera API not supported in this browser.');
+      }
+      throw permissionError;
+    }
+
+    const video = getElem(DOM.VIDEO);
+    video.srcObject = get('stream');
+    await video.play();
+
+    // Check if this device is a Zed camera
+    if (deviceId) {
+      const devices = await getAvailableCameras();
+      const selectedDevice = devices.find((d) => d.deviceId === deviceId);
+      set('isZedDevice', selectedDevice ? isZedDevice(selectedDevice.label) : false);
+    } else {
+      set('isZedDevice', false);
+    }
+  } catch (error) {
+    console.error('❌ Camera start error:', error.message);
+    throw error;
   }
-
-  set('stream', await navigator.mediaDevices.getUserMedia(constraints));
-  const video = getElem(DOM.VIDEO);
-  video.srcObject = get('stream');
-  await video.play();
 }
 
 export function stopCamera() {

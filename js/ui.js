@@ -20,6 +20,16 @@ export function setStatus(msg, cls) {
 
 
 export function initUI() {
+  // Mobile optimization: set better defaults for performance
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    // Higher density value = fewer points rendered = faster
+    set('density', 8);
+    // Disable particles by default on mobile (null = no particles)
+    set('particleType', null);
+    console.log('📱 Mobile optimizations enabled: density=8, particles disabled');
+  }
+
   const btnStart = getElem(DOM.BTN_START);
   const btnDepth = getElem(DOM.BTN_DEPTH);
   const btnStop = getElem(DOM.BTN_STOP);

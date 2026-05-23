@@ -13,8 +13,11 @@ export function initThree() {
   const cam = new THREE.PerspectiveCamera(55, canvas.clientWidth / canvas.clientHeight, 0.01, 200);
   cam.position.set(0, 0, 3);
 
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  const pixelRatio = isMobile ? 1.0 : Math.min(devicePixelRatio, 2);
+
   const ren = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
-  ren.setPixelRatio(Math.min(devicePixelRatio, 2));
+  ren.setPixelRatio(pixelRatio);
   ren.setSize(canvas.clientWidth, canvas.clientHeight);
   ren.setClearColor(0x080a0e, 1);
 
