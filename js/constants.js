@@ -58,6 +58,12 @@ export const DOM = {
   TOG_WEBCAM: 'togWebcam',
   TOG_DEPTH: 'togDepthMap',
   TOG_SAM_MASK: 'togSamMask',
+  TOG_PERSON_ONLY: 'togPersonOnly',
+  MATTING_STATUS: 'mattingStatus',
+  BTN_VOICE: 'btnVoice',
+  VOICE_STATUS: 'voiceStatus',
+  VOICE_LOG: 'voiceLog',
+  FPS_COUNTER: 'fpsCounter',
 };
 
 export const VLM = {

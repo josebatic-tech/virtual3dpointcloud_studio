@@ -24,7 +24,7 @@ export function initDirectorTools() {
   set('backgroundColor', 0x080a0e);
 }
 
-function setCameraPosition(angle) {
+export function setCameraPosition(angle) {
   const cam = ref('camera');
   if (!cam) return;
 
@@ -40,7 +40,7 @@ function setCameraPosition(angle) {
   console.log(`Camera position: ${angle}°`);
 }
 
-function setColorBackground(color) {
+export function setColorBackground(color) {
   const colors = {
     green: 0x1a5f3f,
     blue: 0x0d3b66,
@@ -71,7 +71,7 @@ function setColorBackground(color) {
   console.log(`Background color: ${color}`);
 }
 
-function toggleParticles(type) {
+export function toggleParticles(type) {
   const currentType = get('particleType');
 
   if (currentType === type) {

@@ -13,6 +13,9 @@ import { initDirectorTools } from './director.js';
 import { initPostProcessing } from './postprocessing.js';
 import { setLightIntensity, setAmbientIntensity, setLightColor, toggleInteractiveMode } from './interactive-lights.js';
 import * as zedClient from './zed.js';
+import { setPersonOnly } from './matting.js';
+import { ensureWhisper, isWhisperReady, isRecording, startRecording, stopRecordingAndTranscribe } from './voice.js';
+import { runDirectorCommand } from './agent.js';
 
 export function setStatus(msg, cls) {
   setText(DOM.STATUS, msg, cls);
@@ -388,7 +391,9 @@ export function initUI() {
   bindSlider('ptSize', (v) => {
     set('ptSize', v);
     const p = ref('points');
-    if (p) p.material.size = v;
+    if (!p) return;
+    if (p.material.uniforms?.uPointSize) p.material.uniforms.uPointSize.value = v;
+    else p.material.size = v;
   });
   bindSlider('density', (v) => {
     set('density', v);
@@ -462,6 +467,11 @@ export function initUI() {
     }
   });
 
+  // --- Person-only matting toggle ---
+  bindToggle(DOM.TOG_PERSON_ONLY, (v) => {
+    setPersonOnly(v, (msg) => setText(DOM.MATTING_STATUS, msg || ''));
+  });
+
   // --- Mask navigation ---
   getElem(DOM.BTN_PREV_MASK).onclick = () => selectSAMMask(-1);
   getElem(DOM.BTN_NEXT_MASK).onclick = () => selectSAMMask(1);
@@ -477,6 +487,66 @@ export function initUI() {
 
   // Initialize VLM Chat
   initVLMChat();
+
+  // Initialize Voice Director
+  initVoiceDirector();
+}
+
+function initVoiceDirector() {
+  const btnVoice = document.getElementById(DOM.BTN_VOICE);
+  const voiceLog = document.getElementById(DOM.VOICE_LOG);
+  if (!btnVoice) return;
+
+  const status = (msg) => setText(DOM.VOICE_STATUS, msg || '');
+
+  function logEntry(role, text) {
+    if (!voiceLog) return;
+    voiceLog.style.display = 'block';
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    div.textContent = text;
+    voiceLog.appendChild(div);
+    voiceLog.scrollTop = voiceLog.scrollHeight;
+  }
+
+  btnVoice.onclick = async () => {
+    try {
+      if (isRecording()) {
+        btnVoice.disabled = true;
+        btnVoice.classList.remove('active');
+        btnVoice.textContent = '🎤 Click to talk';
+        const text = await stopRecordingAndTranscribe(status);
+        btnVoice.disabled = false;
+        if (!text) {
+          status('no speech detected');
+          return;
+        }
+        logEntry('user', text);
+        status('running command…');
+        const reply = await runDirectorCommand(text);
+        logEntry('assistant', reply);
+        status('');
+        return;
+      }
+
+      if (!isWhisperReady()) {
+        btnVoice.disabled = true;
+        status('loading voice model…');
+        await ensureWhisper(status);
+        btnVoice.disabled = false;
+      }
+
+      await startRecording();
+      btnVoice.classList.add('active');
+      btnVoice.textContent = '⏹ Listening… click to stop';
+      status('listening…');
+    } catch (e) {
+      btnVoice.disabled = false;
+      btnVoice.classList.remove('active');
+      btnVoice.textContent = '🎤 Click to talk';
+      status('voice error: ' + (e?.message || String(e)));
+    }
+  };
 }
 
 function bindSlider(id, cb, isFloat) {

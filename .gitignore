@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Certificates / private keys — never commit these
+*.pem
+*.pfx
+*.key
+*.crt
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Local recordings / large captures
+zedRecording/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+node_modules/

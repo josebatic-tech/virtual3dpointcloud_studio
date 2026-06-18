@@ -3,13 +3,14 @@ import { updateParticles } from './particles.js';
 import { renderWithPostProcessing } from './postprocessing.js';
 
 export function startRenderLoop() {
-  let frameCount = 0;
   const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
   const FPS_CAP = isMobile ? 10 : 40;
   const frameTime = 1000 / FPS_CAP;
   let lastFrameTime = performance.now();
 
-  if (isMobile) console.log('📱 Mobile mode: 10fps rendering');
+  const fpsEl = document.getElementById('fpsCounter');
+  let fpsFrames = 0;
+  let fpsLast = performance.now();
 
   function loop() {
     requestAnimationFrame(loop);
@@ -18,8 +19,13 @@ export function startRenderLoop() {
 
     if (dt < frameTime) return;
     lastFrameTime = now - (dt - frameTime);
-    frameCount++;
-    if (frameCount <= 5) console.log('render frame', frameCount, 'renderer:', !!ref('renderer'), 'scene:', !!ref('scene'), 'camera:', !!ref('camera'));
+
+    fpsFrames++;
+    if (fpsEl && now - fpsLast >= 1000) {
+      fpsEl.textContent = Math.round((fpsFrames * 1000) / (now - fpsLast)) + ' fps';
+      fpsFrames = 0;
+      fpsLast = now;
+    }
 
     const cam = ref('camera');
     const keys = ref('keys');

@@ -123,6 +123,14 @@
               <label>Auto-rot</label>
               <button id="btnRotate" class="btn-flex">↻ Off</button>
             </div>
+            <div class="toggle-row mt-6">
+              <span class="toggle-label">Person Only</span>
+              <label class="toggle">
+                <input type="checkbox" id="togPersonOnly"/>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div id="mattingStatus" class="sam-status"></div>
           </div>
         </div>
 
@@ -196,6 +204,14 @@
 
         <!-- 🤖 AI / VLM TAB -->
         <div class="tab-panel" id="tab-ai">
+          <div class="sidebar-section">
+            <div class="sidebar-section-title">Voice Director</div>
+            <button id="btnVoice" style="width:100%;">🎤 Click to talk</button>
+            <div id="voiceStatus" class="sam-status"></div>
+            <div id="voiceLog" class="chat-history" style="margin-top:8px;display:none;"></div>
+            <p class="sam-hint">Try: "make it snow", "blue background", "zoom in", "person only", "describe the scene"</p>
+          </div>
+
           <div id="vlm-panel" class="sidebar-section">
             <div class="sidebar-section-title">VLM Chat</div>
             <div class="param-label">System Prompt</div>
@@ -286,6 +302,7 @@
       </div>
       <div id="lightDot"></div>
       <div id="crosshair"></div>
+      <div id="fpsCounter" style="position:absolute;top:8px;right:8px;font-family:var(--font-mono);font-size:10px;color:#9fb3c8;background:rgba(8,10,14,0.6);padding:2px 6px;border-radius:4px;pointer-events:none;"></div>
     </div>
 
   </main>

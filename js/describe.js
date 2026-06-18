@@ -1,169 +1,103 @@
-import { get, set } from './store.js';
-import { MODELS, DOM, DEFAULTS } from './constants.js';
-import { mirrorFrame, getElem } from './utils.js';
+import { VLM } from './constants.js';
+import { getElem, mirrorFrame } from './utils.js';
+import { DOM } from './constants.js';
 
-let _model = null;
-let _processor = null;
-let _busy = false;
-let _describeMode = 'florence'; // 'florence' or 'vlm'
+let _isBusy = false;
 
-function _patchFetch(token) {
-  const orig = window._hfFetchOrig || window.fetch;
-  window._hfFetchOrig = orig;
-  window.fetch = (url, opts = {}) => {
-    if (typeof url === 'string' && url.includes('huggingface.co')) {
-      opts = { ...opts, headers: { ...opts.headers, 'Authorization': 'Bearer ' + token } };
-    }
-    return orig(url, opts);
-  };
-}
+export async function describeViaVLM(userPrompt, systemPrompt = '', history = []) {
+  console.log('📸 describeViaVLM called:', { userPrompt, systemPrompt: systemPrompt?.substring(0, 30) });
 
-function _makeProgress(onStatus) {
-  let lastPct = -1;
-  return (e) => {
-    if (e.status === 'initiate') { onStatus('downloading ' + e.file + '…'); lastPct = -1; }
-    else if (e.status === 'progress' && e.total > 0) {
-      const pct = Math.round((e.loaded / e.total) * 100);
-      if (pct !== lastPct) { lastPct = pct; onStatus(e.file + ' ' + pct + '%'); }
-    }
-  };
-}
-
-export async function loadDescribeModel(onStatus) {
-  const token = document.getElementById('hfToken')?.value?.trim();
-  if (token) _patchFetch(token);
-
-  onStatus('loading transformers…');
-  const { Florence2ForConditionalGeneration, AutoProcessor, env } =
-    await import('@huggingface/transformers');
-  env.allowLocalModels = false;
-
-  onStatus('downloading Florence-2 processor…');
-  _processor = await AutoProcessor.from_pretrained(MODELS.DESCRIBE, {
-    progress_callback: _makeProgress(onStatus),
-  });
-
-  onStatus('downloading Florence-2 model (~270mb)…');
-  _model = await Florence2ForConditionalGeneration.from_pretrained(MODELS.DESCRIBE, {
-    device: 'wasm',
-    dtype: 'q8',
-    progress_callback: _makeProgress(onStatus),
-  });
-
-  set('describeLoaded', true);
-  onStatus('ready');
-}
-
-export function setDescribeMode(mode) {
-  _describeMode = mode; // 'florence' or 'vlm'
-}
-
-export async function describeScene() {
-  if (_busy) return '';
-
-  if (_describeMode === 'vlm') {
-    return describeViaVLM();
+  if (_isBusy) {
+    console.warn('⚠️  Already processing, ignoring');
+    return { content: '', error: 'Already processing' };
   }
 
-  // Florence-2 mode (original)
-  if (!_model || !_processor) return '';
-  _busy = true;
-
+  _isBusy = true;
   try {
     const video = getElem(DOM.VIDEO);
-    const vw = video.videoWidth || DEFAULTS.VIDEO_WIDTH;
-    const vh = video.videoHeight || DEFAULTS.VIDEO_HEIGHT;
-    if (!vw || !vh) return '';
+    if (!video || !video.videoWidth) {
+      console.error('❌ No video element or width');
+      return { content: '', error: 'No video stream' };
+    }
 
-    const { RawImage } = await import('@huggingface/transformers');
-    const { canvas } = mirrorFrame(video, vw, vh);
-    const image = RawImage.fromCanvas(canvas);
+    // Check if video is actually playing with frames
+    if (video.paused || video.readyState < 2) {
+      console.error('❌ Video not ready:', { paused: video.paused, readyState: video.readyState });
+      return { content: '', error: 'Video not ready. Please start camera first.' };
+    }
 
-    const task = '<MORE_DETAILED_CAPTION>';
-    const inputs = await _processor(image, task);
+    // Resize canvas for faster processing - max 640px width
+    let targetWidth = Math.min(video.videoWidth, VLM.MAX_IMAGE_SIZE);
+    let targetHeight = Math.round((targetWidth / video.videoWidth) * video.videoHeight);
 
-    const generated_ids = await _model.generate({
-      ...inputs,
-      max_new_tokens: 100,
+    const { canvas } = mirrorFrame(video, targetWidth, targetHeight);
+
+    // Use lower quality to reduce payload size (0.6 = 60% quality)
+    const imageB64 = canvas.toDataURL('image/jpeg', VLM.IMAGE_QUALITY).split(',')[1];
+
+    // Validate we got image data
+    if (!imageB64 || imageB64.length < 100) {
+      console.error('❌ Image data too small:', imageB64?.length);
+      return { content: '', error: 'Video frame is empty or too small. Try again in a moment.' };
+    }
+    console.log('✅ Image captured:', imageB64.length, 'bytes (optimized)');
+
+    const messages = [];
+    if (systemPrompt.trim()) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+
+    messages.push(...history);
+    // Use direct data URL format which llama.cpp/LLaVA handles correctly
+    messages.push({
+      role: 'user',
+      content: `data:image/jpeg;base64,${imageB64}\n\n${userPrompt}`
     });
 
-    const raw = _processor.batch_decode(generated_ids, { skip_special_tokens: false })[0];
-    console.log('Florence raw output:', raw);
+    const endpoint = `${VLM.ENDPOINT}/v1/chat/completions`;
+    console.log('🌐 Calling API:', endpoint);
+    console.log('   Model:', VLM.MODEL, '| Max tokens:', VLM.MAX_TOKENS);
 
-    // Try post_process_generation first
+    let response;
     try {
-      const result = _processor.post_process_generation(raw, task, image.size);
-      const caption = result[task];
-      if (caption && !caption.includes('<') ) return caption.trim();
-    } catch (_) {}
-
-    // Manual extraction between task tags
-    const closeTag = task.replace('<', '</');
-    const start = raw.indexOf(task);
-    const end = raw.indexOf(closeTag);
-    if (start !== -1 && end > start) return raw.slice(start + task.length, end).trim();
-
-    // Last resort: strip all angle-bracket tokens
-    return raw.replace(/<[^>]+>/g, '').trim();
-  } finally {
-    _busy = false;
-  }
-}
-
-async function describeViaVLM() {
-  _busy = true;
-  try {
-    const video = getElem(DOM.VIDEO);
-    const vw = video.videoWidth || DEFAULTS.VIDEO_WIDTH;
-    const vh = video.videoHeight || DEFAULTS.VIDEO_HEIGHT;
-    if (!vw || !vh) return '';
-
-    const { RawImage } = await import('@huggingface/transformers');
-    const { canvas } = mirrorFrame(video, vw, vh);
-    const image = RawImage.fromCanvas(canvas);
-
-    // Convert to base64
-    const imageB64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
-    // Call Ollama API with vision capability
-    // Uses OpenAI-compatible API format
-    const response = await fetch('http://localhost:11434/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llava', // or your preferred vision model in Ollama
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Describe this scene in detail. What do you see? Be specific and concise.'
-            },
-            {
-              type: 'image_url',
-              image_url: { url: `data:image/jpeg;base64,${imageB64}` }
-            }
-          ]
-        }],
-        max_tokens: 150,
-        temperature: 0.7
-      })
-    });
+      console.log('⏳ Waiting for response...');
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        mode: 'cors',
+        body: JSON.stringify({
+          model: VLM.MODEL,
+          messages,
+          max_tokens: VLM.MAX_TOKENS,
+          temperature: VLM.TEMPERATURE
+        })
+      });
+      console.log('📨 Response received:', response.status);
+    } catch (corsError) {
+      console.error('❌ CORS or network error:', corsError.message);
+      return {
+        content: '',
+        error: `Connection failed. Is llama.cpp server running on ${VLM.ENDPOINT}?`
+      };
+    }
 
     if (!response.ok) {
-      const err = await response.text();
-      console.error('VLM API error:', err);
-      throw new Error('VLM API failed: ' + response.statusText);
+      console.error('❌ Response not OK:', response.status);
+      const errText = await response.text();
+      console.error('   Error:', errText);
+      return { content: '', error: `API error: ${response.statusText}` };
     }
 
+    console.log('📖 Parsing JSON...');
     const data = await response.json();
-    const caption = data.choices?.[0]?.message?.content?.trim() || '(no response)';
-    console.log('VLM response:', caption);
-    return caption;
+    console.log('✅ JSON parsed:', data);
+    const content = data.choices?.[0]?.message?.content?.trim() || '(no response)';
+    console.log('🎯 VLM response:', content);
+    return { content, error: null };
   } catch (e) {
     console.error('VLM describe error:', e);
-    throw e;
+    return { content: '', error: e.message };
   } finally {
-    _busy = false;
+    _isBusy = false;
   }
 }

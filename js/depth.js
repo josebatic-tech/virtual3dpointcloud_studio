@@ -1,7 +1,5 @@
 import { get, set } from './store.js';
-import { MODELS, DEPTH } from './constants.js';
-import { DEFAULTS, DOM } from './constants.js';
-import { CAMERA_RESOLUTIONS } from './constants.js';
+import { MODELS, DEPTH, DEFAULTS, DOM, CAMERA_RESOLUTIONS } from './constants.js';
 import { mirrorFrame, getElem, setText } from './utils.js';
 import { rebuildGeometry, writeDepthFrame } from './pointcloud.js';
 import { rebuildGeometry as rebuildMeshGeometry, writeDepthFrame as writeMeshDepthFrame } from './mesh.js';
@@ -154,8 +152,6 @@ export async function runDepthFrame() {
       depthFlat[i] = isFinite(raw[i]) ? (raw[i] - mn) / rng : 0.5;
     }
 
-    console.log('depth: size=' + dW + 'x' + dH + ' range=' + mn.toFixed(3) + '-' + mx.toFixed(3) + ' first5=' + Array.from(depthFlat.slice(0,5)).map(v=>v.toFixed(3)).join(','));
-
     set('depthW', dW);
     set('depthH', dH);
   } catch (e) {
@@ -164,11 +160,9 @@ export async function runDepthFrame() {
   }
 
   try {
-    console.log('check dims: _prevW=' + _prevW + ' W=' + W + ' _prevH=' + _prevH + ' H=' + H);
     if (_prevW !== W || _prevH !== H) {
       _prevW = W;
       _prevH = H;
-      console.log('rebuilding geometry');
       if (get('meshMode')) {
         rebuildMeshGeometry();
       } else {
@@ -177,7 +171,6 @@ export async function runDepthFrame() {
     }
 
     const videoFrame = offCtx.getImageData(0, 0, W, H).data;
-    console.log('videoFrame length:', videoFrame.length, 'WxH:', W, 'x', H);
     if (get('meshMode')) {
       writeMeshDepthFrame(depthFlat, get('depthW'), get('depthH'), videoFrame);
     } else {

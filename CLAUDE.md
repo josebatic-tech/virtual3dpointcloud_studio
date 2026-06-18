@@ -28,6 +28,11 @@ js/
 ├── streamdiffusion.js     # Img2img generation integration
 ├── describe.js            # Scene description (Florence-2, RealTime VLM)
 ├── sam.js                 # SAM segmentation
+├── voice.js               # Whisper speech-to-text (in-browser, Transformers.js)
+├── agent.js               # Director agent: natural-language → app commands (rules + LLM fallback)
+├── matting.js             # Person matting (MODNet) for "Person Only" mode
+├── zed.js                 # Zed 2 stereo camera WebSocket client
+├── mesh.js                # Mesh-mode rendering (CPU geometry)
 ├── environment.js         # Environment/scene building
 ├── relight.js             # Lighting controls
 ├── depth.js               # Depth estimation pipeline
@@ -90,12 +95,25 @@ Fires every `requestAnimationFrame()`:
   - Backdrop sphere material color (if exists)
 
 ### Depth Visualization (`pointcloud.js`)
-- Builds grid geometry from depth map (W × H vertices)
-- Vertex positions interpolated from depth + video color
-- Material: PointsMaterial with `sizeAttenuation: true`
+- GPU-resident: static grid geometry (positions + uvs) built once per resolution
+- Per frame only textures are uploaded: depth (R32F), video color (RGBA), SAM/person masks (R8)
+- Custom ShaderMaterial: vertex shader displaces points by depth, fragment samples video color
+- SAM dimming and Person-Only clipping happen in the shader (no per-vertex CPU loop)
 - **Density slider** rebuilds geometry (divides res by 2-12)
-- **Pt Size slider** adjusts material.size (1-8)
-- **Depth Scale slider** multiplies Z position (0.5-5x)
+- **Pt Size slider** sets the `uPointSize` uniform (1-8)
+- **Depth Scale slider** sets the `uDepthScale` uniform (0.5-5x)
+- Zed mode replaces the points object with its own CPU geometry (see `zed.js`)
+
+### Voice Director (`voice.js` + `agent.js`)
+- 🎤 button (AI tab) records mic audio, transcribes with whisper-tiny.en in-browser
+- `agent.js:runDirectorCommand(text)` parses commands with keyword rules first,
+  falls back to the local LLM (llama.cpp proxy) asking for a JSON action
+- Supported: background colors, rain/snow/wind, auto-rotate, camera left/right/center,
+  zoom in/out, person-only on/off, fullscreen, describe scene
+
+### Person Only mode (`matting.js`)
+- "Person Only" toggle (Point Cloud tab) runs MODNet portrait matting in a throttled loop
+- Publishes mask to store key 'personMask'; the point cloud shader clips background points
 
 ---
 

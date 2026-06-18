@@ -1,102 +1,145 @@
-# Pointcloud VLM — 3D Scene Understanding with Real-time Vision Language Models
+# 3D Point Cloud Studio — Real-time Depth Visualization & AI Vision
 
-A web-based application that combines **3D depth point cloud visualization**, **real-time object segmentation (SAM)**, and **Vision Language Model scene descriptions** using RealTime-VLM with Ollama.
+A web-based application that combines **3D depth point cloud visualization**, **real-time object segmentation (SAM)**, and **Vision Language Model scene descriptions** using LLaVA with llama.cpp GPU acceleration.
+
+**✨ Works on Desktop, Laptop, Tablet, Phone (iOS & Android)**
 
 ## Features
 
 ✨ **3D Point Cloud Visualization** — Real-time WebGL rendering of depth maps as interactive 3D point clouds  
-🎥 **Live Webcam Feed** — Stream camera input with depth estimation  
-🤖 **Vision Language Models** — Describe scenes using Florence-2 (in-browser) or RealTime-VLM (local Ollama)  
-🎯 **SAM Segmentation** — Segment objects by clicking on preview; mask-aware depth extraction  
-🔄 **Viewport Toggle** — Smooth crossfade between 3D point cloud and camera views  
-📊 **Real-time Previews** — Simultaneous display of webcam, depth map, and SAM masks in sidebar  
-⚡ **GPU-Accelerated** — Uses CUDA when available; CPU fallback supported  
+🎥 **Live Webcam Feed** — Stream camera input with depth estimation (all devices)  
+🤖 **AI Vision Chat** — Ask questions about scenes using LLaVA VLM with GPU acceleration  
+🎯 **SAM Segmentation** — Segment objects by clicking; mask-aware depth extraction  
+🔄 **Viewport Toggle** — Switch between 3D point cloud and camera views  
+📊 **Real-time Previews** — Simultaneous webcam, depth map, and segmentation displays  
+⚡ **GPU-Accelerated** — NVIDIA GPU support for fast VLM inference (33/33 layers offloaded)  
+📱 **Mobile First** — Full iOS/Android support with optimized constraints  
+🎨 **VS Code Tabs UI** — Modular tab interface for Camera, Point Cloud, Aesthetics, AI, Settings  
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│         Browser (localhost:8000)        │
-├─────────────────────────────────────────┤
-│  HTML5 Canvas (WebGL Three.js)          │
-│  - 3D point cloud visualization         │
-│  - Camera feed / depth preview          │
-│  - SAM segmentation overlay             │
-│                                         │
-│  JavaScript Modules                     │
-│  - depth.js (inference)                 │
-│  - describe.js (VLM calls)              │
-│  - sam.js (segmentation)                │
-│  - ui.js (event handling)               │
-└────────────┬────────────────────────────┘
-             │ (HTTP requests)
-             ↓
-┌─────────────────────────────────────────┐
-│    Ollama API (localhost:11434)         │
-├─────────────────────────────────────────┤
-│  RealTime-VLM (llava model)             │
-│  - Vision language understanding        │
-│  - Image-to-text inference              │
-└─────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│    Browser (Vite Dev Server on all interfaces:5173)       │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  Frontend                                                  │
+│  ├── Camera & Depth (WebGPU/WASM)                        │
+│  ├── 3D Point Cloud (Three.js WebGL)                     │
+│  ├── SAM Segmentation                                    │
+│  ├── VS Code Tabs UI                                     │
+│  └── VLM Chat Interface                                  │
+│                                                            │
+│  POST /v1/chat/completions (image + text)                │
+└────────────┬─────────────────────────────────────────────┘
+             │
+             │ (JSON with base64 image)
+             │
+┌────────────▼─────────────────────────────────────────────┐
+│      CORS Proxy (Node.js) - Port 3001 (all interfaces)   │
+├────────────────────────────────────────────────────────────┤
+│  • Strips duplicate CORS headers                          │
+│  • Adds proper Access-Control-Allow-Origin headers       │
+│  • Forwards requests to llama.cpp                         │
+└────────────┬─────────────────────────────────────────────┘
+             │
+             │ (Plain HTTP)
+             │
+┌────────────▼─────────────────────────────────────────────┐
+│   llama.cpp VLM Server - Port 8080 (all interfaces)      │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  • LLaVA 7.24B Model (4.1GB, Q4_K_M quantized)          │
+│  • All 33 layers offloaded to GPU (NVIDIA CUDA)          │
+│  • ~5-10 tokens/second inference speed                   │
+│  • OpenAI-compatible API (/v1/chat/completions)         │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
 
-Optional:
-┌─────────────────────────────────────────┐
-│   FastAPI Backend (localhost:8001)      │
-├─────────────────────────────────────────┤
-│  StreamDiffusion (in development)       │
-│  - Text-to-image generation             │
-│  - Real-time image synthesis            │
-└─────────────────────────────────────────┘
+### Service Communication
+
+```
+Device 1 (Desktop/Mobile)          Device 2 (Server/Host)
+    ├─ http://192.168.1.135:5173  ──→ Vite Dev Server (5173)
+    │                                 ├─ Serves HTML/JS/CSS
+    │                                 └─ Listens on 0.0.0.0
+    │
+    ├─ POST /v1/chat/completions ──→ CORS Proxy (3001)
+    │  (with image + text)            ├─ Adds CORS headers
+    │                                 └─ Forwards request
+    │
+    └─ /v1/chat/completions ──→ llama.cpp (8080)
+       (forwarded)                 └─ Returns AI response
+
+All services listen on 0.0.0.0 (all network interfaces)
+Accessible from any device on the same network
 ```
 
 ## Quick Start
 
-### 1. Install Ollama (Required for VLM)
-
-- **Windows/Mac/Linux**: Download from https://ollama.ai
-- After installation, verify: `ollama --version`
-
-### 2. Start Ollama with CORS Enabled
-
-**Windows (PowerShell):**
-```powershell
-$env:OLLAMA_ORIGINS="*"
-ollama serve
-```
-
-**Mac/Linux:**
-```bash
-export OLLAMA_ORIGINS="*"
-ollama serve
-```
-
-This starts the Ollama server on `localhost:11434`.
-
-### 3. Pull the Vision Model
-
-In a new terminal:
-```bash
-ollama pull llava
-```
-
-This downloads the llava model (~5GB). First run takes a few minutes.
-
-### 4. Start the Frontend
+### 1. Install Dependencies
 
 ```bash
-cd files
-python -m http.server 8000
+npm install
 ```
 
-Open your browser: **http://localhost:8000**
+### 2. Start VLM Server (llama.cpp with GPU)
 
-### 5. Use the App
+**Windows/Mac/Linux:**
+```bash
+cd ~/llama.cpp
+./llama-server -m models/llava-7b.gguf --port 8080 --host 0.0.0.0 \
+  -ngl 33 -n 200 -c 2048 --threads 4
+```
 
-1. Click **"▶ Start"** to activate your webcam
-2. Click **"◈ Depth"** to begin depth estimation
-3. Toggle **"Florence-2"** or **"RealTime-VLM"** in the Describe section
-4. Click **"◈ Describe Scene"** to see AI-generated descriptions
-5. Enable **SAM** to segment objects (click on the preview)
+This starts the GPU-accelerated VLM server on `0.0.0.0:8080`.
+
+**Note**: First run downloads model. Subsequent runs are instant.
+
+### 3. Start CORS Proxy (New Terminal)
+
+```bash
+node proxy-server.js
+```
+
+This forwards requests from browser to VLM on `0.0.0.0:3001`.
+
+### 4. Start Development Server (New Terminal)
+
+```bash
+npm run dev
+```
+
+The app will be available on all network interfaces.
+
+### 5. Access the App
+
+**Desktop (Localhost):**
+```
+http://localhost:5173
+```
+
+**Mobile (Same Network):**
+```
+http://<YOUR_SERVER_IP>:5173
+```
+
+Get your IP:
+- Windows: `ipconfig | findstr IPv4`
+- Mac/Linux: `ifconfig | grep inet`
+
+Example: `http://192.168.1.135:5173`
+
+### 6. Use the App
+
+1. Click **▶ Start** in Camera tab to activate your webcam
+2. Grant camera permissions when prompted
+3. Go to **AI/VLM** tab to ask questions about the scene
+4. Use **Point Cloud** tab to adjust visualization
+5. Customize appearance in **Aesthetics** tab
+
+**📱 Mobile Setup**: See [MOBILE_SETUP.md](MOBILE_SETUP.md) for iOS/Android specific instructions.
 
 ## Installation Details
 

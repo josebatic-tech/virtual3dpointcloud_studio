@@ -12,6 +12,7 @@ const _state = {
   stream: null,
   isRunning: false,
   interval: null,
+  cameraRes: DEFAULTS.CAMERA_RES,
   ptSize: DEFAULTS.PT_SIZE,
   density: DEFAULTS.DENSITY,
   depthScale: DEPTH.DEFAULT_SCALE,
@@ -25,9 +26,7 @@ const _state = {
   lightPos: { x: 0, y: 2, z: 3 },
   lightIntensity: DEFAULTS.LIGHT_INTENSITY,
   autoRotate: false,
-  describeModel: null,
-  describeProcessor: null,
-  describeLoaded: false,
+  vlmHistory: [],
   samModel: null,
   samProcessor: null,
   samLoaded: false,
@@ -39,6 +38,8 @@ const _state = {
   samScores: null,
   samClickPoint: null,
   sdGenerating: false,
+  personOnly: false,
+  personMask: null,
 };
 
 const _refs = {};
