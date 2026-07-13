@@ -47,15 +47,15 @@ function _buildColorBackdrop() {
   const old = ref('colorBackdrop');
   if (old) ref('scene').remove(old);
 
-  const geo = new THREE.SphereGeometry(50, 32, 32);
+  const geo = new THREE.SphereGeometry(100, 16, 16);
   const color = get('backgroundColor') || 0x080a0e;
-  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide, depthTest: false, depthWrite: false });
   const backdrop = new THREE.Mesh(geo, mat);
   backdrop.visible = get('colorBackdropVisible') !== false;
-  backdrop.renderOrder = -100;
+  backdrop.renderOrder = -1000;
   ref('scene').add(backdrop);
   setRef('colorBackdrop', backdrop);
-  console.log(`Backdrop sphere created: color=0x${color.toString(16)}, visible=${backdrop.visible}, renderOrder=${backdrop.renderOrder}`);
+  console.log(`Backdrop sphere created: color=0x${color.toString(16)}, visible=${backdrop.visible}, size=100`);
 }
 
 function _updateFog() {
@@ -75,5 +75,6 @@ export function setBackgroundColor(colorHex) {
   const backdrop = ref('colorBackdrop');
   if (backdrop && backdrop.material) {
     backdrop.material.color.setHex(colorHex);
+    backdrop.material.needsUpdate = true;
   }
 }
