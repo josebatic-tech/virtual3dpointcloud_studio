@@ -41,6 +41,8 @@ export function setCameraPosition(angle) {
 }
 
 export function setColorBackground(color) {
+  console.log('=== setColorBackground called with:', color);
+
   const colors = {
     green: 0x1a5f3f,
     blue: 0x0d3b66,
@@ -50,17 +52,16 @@ export function setColorBackground(color) {
 
   if (colors[color]) {
     const hexColor = colors[color];
-    const renderer = ref('renderer');
-    if (renderer) {
-      renderer.setClearColor(hexColor, 1);
-      console.log(`Renderer clear color set to: 0x${hexColor.toString(16)}`);
-    }
+    console.log('Hex color:', hexColor.toString(16));
 
-    const backdrop = ref('colorBackdrop');
-    console.log(`Backdrop ref:`, backdrop);
-    if (backdrop && backdrop.material) {
-      backdrop.material.color.setHex(hexColor);
-      console.log(`Backdrop material color set to: 0x${hexColor.toString(16)}`);
+    const renderer = ref('renderer');
+    console.log('Renderer exists?', !!renderer);
+    if (renderer) {
+      console.log('Setting clear color...');
+      renderer.setClearColor(hexColor, 1);
+      console.log('Clear color set, current clear color:', renderer.getClearColor());
+    } else {
+      console.error('ERROR: Renderer ref is undefined!');
     }
 
     setBackgroundColor(hexColor);
@@ -70,8 +71,8 @@ export function setColorBackground(color) {
     document.getElementById('btnBgBlue')?.classList.toggle('active', color === 'blue');
     document.getElementById('btnBgRed')?.classList.toggle('active', color === 'red');
     document.getElementById('btnBgYellow')?.classList.toggle('active', color === 'yellow');
-
-    console.log(`Background color: ${color}`);
+  } else {
+    console.error('Invalid color:', color);
   }
 }
 
