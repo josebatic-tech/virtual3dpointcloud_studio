@@ -68,7 +68,9 @@
       "Bash(taskkill /F /IM node.exe /T)",
       "PowerShell(Start-Process -NoNewWindow -FilePath \"npx\" -ArgumentList \"vite\", \"--port\", \"5200\", \"--config\", \"vite.config.nossl.js\" -RedirectStandardOutput \"$env:TEMP\\\\vite-nossl.log\" -RedirectStandardError \"$env:TEMP\\\\vite-nossl-err.log\"; Start-Sleep -Seconds 2; Write-Host \"launched\")",
       "PowerShell(npx vite --config vite.config.nossl.js)",
-      "Bash(git commit -m 'fix: make vite HTTPS config optional for deployment servers *)"
+      "Bash(git commit -m 'fix: make vite HTTPS config optional for deployment servers *)",
+      "Bash(git commit -m 'feat: remove VLM and Settings tabs from UI *)",
+      "Bash(git commit -m 'fix: use setBackgroundColor from environment for proper color updates *)"
     ]
   }
 }
