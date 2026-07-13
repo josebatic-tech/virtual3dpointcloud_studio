@@ -28,8 +28,6 @@
         <button class="tab-btn active" data-tab="camera" title="Camera">🎥</button>
         <button class="tab-btn" data-tab="pointcloud" title="Point Cloud">☁️</button>
         <button class="tab-btn" data-tab="aesthetics" title="Aesthetics">🎨</button>
-        <button class="tab-btn" data-tab="ai" title="AI / VLM">🤖</button>
-        <button class="tab-btn" data-tab="settings" title="Settings">⚙️</button>
       </nav>
 
       <div id="tab-panels">
@@ -202,95 +200,6 @@
           </div>
         </div>
 
-        <!-- 🤖 AI / VLM TAB -->
-        <div class="tab-panel" id="tab-ai">
-          <div class="sidebar-section">
-            <div class="sidebar-section-title">Voice Director</div>
-            <button id="btnVoice" style="width:100%;">🎤 Click to talk</button>
-            <div id="voiceStatus" class="sam-status"></div>
-            <div id="voiceLog" class="chat-history" style="margin-top:8px;display:none;"></div>
-            <p class="sam-hint">Try: "make it snow", "blue background", "zoom in", "person only", "describe the scene"</p>
-          </div>
-
-          <div id="vlm-panel" class="sidebar-section">
-            <div class="sidebar-section-title">VLM Chat</div>
-            <div class="param-label">System Prompt</div>
-            <textarea id="vlmSystemPrompt" rows="2" placeholder="e.g. You are a depth map analyst..." style="width:100%;font-family:var(--font-mono);font-size:9px;padding:6px;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);background:transparent;outline:none;resize:none;"></textarea>
-
-            <div class="param-row" style="margin-top:8px;">
-              <label>Model</label>
-              <select id="vlmModel" style="flex:1;background:transparent;border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:9px;padding:4px 6px;border-radius:var(--radius);outline:none;">
-                <option value="llava">LLaVA</option>
-                <option value="moondream">Moondream 2</option>
-                <option value="llava:13b">LLaVA 13B</option>
-              </select>
-            </div>
-
-            <div id="vlmChat" class="chat-history" style="margin-top:8px;"></div>
-
-            <div id="vlmInputRow" style="display:flex;gap:4px;margin-top:8px;">
-              <textarea id="vlmInput" rows="1" placeholder="Ask about the scene..." style="flex:1;font-family:var(--font-mono);font-size:9px;padding:6px;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);background:transparent;outline:none;resize:none;"></textarea>
-              <button id="btnVLMSend" style="padding:6px 12px;background:var(--accent);border:none;border-radius:var(--radius);color:#fff;font-size:11px;cursor:pointer;font-weight:bold;">▶</button>
-            </div>
-            <button id="btnVLMClear" class="btn-small" style="margin-top:4px;width:100%;padding:4px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:9px;cursor:pointer;">Clear history</button>
-          </div>
-
-          <div class="sidebar-section">
-            <div class="sidebar-section-title">Segment (SAM)</div>
-            <div class="toggle-row">
-              <span class="toggle-label">Enable SAM</span>
-              <label class="toggle">
-                <input type="checkbox" id="togSam"/>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="param-row">
-              <label>Opacity</label>
-              <input type="range" id="samOpacity" min="0" max="1" step=".05" value="0.3"/>
-              <span class="val" id="samOpacityVal">0.3</span>
-            </div>
-            <div id="samStatus" class="sam-status"></div>
-            <div id="samMaskSelector" class="mask-selector">
-              <div class="mask-row">
-                <button id="btnPrevMask" class="mask-btn">◀</button>
-                <span id="samMaskLabel" class="mask-label">mask 1/3</span>
-                <button id="btnNextMask" class="mask-btn">▶</button>
-              </div>
-            </div>
-            <p class="sam-hint">Click on the webcam preview to select an object</p>
-            <div class="preview-panel" id="previewSam">
-              <span class="plabel">sam mask</span>
-              <canvas id="samCanvas"></canvas>
-            </div>
-            <div style="display:flex; gap:6px; margin-top:8px;">
-              <label class="toggle">
-                <input type="checkbox" id="togSamMask" checked data-preview="previewSam"/>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- ⚙️ SETTINGS TAB -->
-        <div class="tab-panel" id="tab-settings">
-          <div class="sidebar-section">
-            <div class="sidebar-section-title">StreamDiffusion</div>
-            <textarea id="sdPrompt" placeholder="Describe an image…" style="width:100%;height:40px;resize:none;font-family:var(--font-mono);font-size:9px;padding:6px;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);background:transparent;outline:none;"></textarea>
-            <div style="display:flex;gap:6px;margin-top:8px;">
-              <label class="toggle" style="flex:1;">
-                <input type="checkbox" id="togStreamDiffusion"/>
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-label" style="flex:0;">Generate</span>
-            </div>
-            <div class="preview-panel" id="previewStreamDiffusion">
-              <span class="plabel">diffusion</span>
-              <img id="sdResultImg" style="width:100%;height:100%;object-fit:cover;display:none;"/>
-              <div id="sdLoading" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text-dim);font-size:9px;">ready</div>
-            </div>
-            <div id="sdStatus" class="sam-status"></div>
-          </div>
-        </div>
 
       </div>
     </aside>
