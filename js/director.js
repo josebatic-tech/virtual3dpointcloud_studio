@@ -8,12 +8,6 @@ export function initDirectorTools() {
   document.getElementById('btnCamLeft')?.addEventListener('click', () => setCameraPosition(-45));
   document.getElementById('btnCamRight')?.addEventListener('click', () => setCameraPosition(45));
 
-  // Background color buttons
-  document.getElementById('btnBgGreen')?.addEventListener('click', () => setColorBackground('green'));
-  document.getElementById('btnBgBlue')?.addEventListener('click', () => setColorBackground('blue'));
-  document.getElementById('btnBgRed')?.addEventListener('click', () => setColorBackground('red'));
-  document.getElementById('btnBgYellow')?.addEventListener('click', () => setColorBackground('yellow'));
-
   // Particle effect buttons
   document.getElementById('btnParticleRain')?.addEventListener('click', () => toggleParticles('rain'));
   document.getElementById('btnParticleSnow')?.addEventListener('click', () => toggleParticles('snow'));

@@ -284,17 +284,6 @@ export function initUI() {
     };
   }
 
-  // Interactive lighting toggle
-  const btnInteractiveLight = getElem(DOM.BTN_INTERACTIVE_LIGHT);
-  if (btnInteractiveLight) {
-    btnInteractiveLight.onclick = () => {
-      const isEnabled = get('interactiveLightMode');
-      toggleInteractiveMode(!isEnabled);
-      btnInteractiveLight.classList.toggle('active', !isEnabled);
-      btnInteractiveLight.textContent = !isEnabled ? '💡 On' : '💡 Off';
-    };
-  }
-
   // Viewport toggle (Point Cloud ↔ Camera)
   if (btnViewPointCloud && btnViewCamera) {
     btnViewPointCloud.onclick = () => {
@@ -419,24 +408,6 @@ export function initUI() {
     const p = ref('particleSystem');
     if (p && p.material) p.material.opacity = v;
   }, true);
-
-  bindSlider('lightIntensity', (v) => {
-    set('lightIntensity', v);
-    setLightIntensity(v);
-  }, true);
-
-  bindSlider('lightAmbience', (v) => {
-    set('lightAmbience', v);
-    setAmbientIntensity(v);
-  }, true);
-
-  const lightColorInput = document.getElementById('lightColor');
-  if (lightColorInput) {
-    lightColorInput.oninput = (e) => {
-      set('lightColor', e.target.value);
-      setLightColor(e.target.value);
-    };
-  }
 
   // --- Preview toggles ---
   [DOM.TOG_WEBCAM, DOM.TOG_DEPTH, DOM.TOG_SAM_MASK].forEach((id) => {
