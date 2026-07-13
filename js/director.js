@@ -57,9 +57,9 @@ export function setColorBackground(color) {
     const renderer = ref('renderer');
     console.log('Renderer exists?', !!renderer);
     if (renderer) {
-      console.log('Setting clear color...');
+      console.log('Setting clear color to:', '0x' + hexColor.toString(16));
       renderer.setClearColor(hexColor, 1);
-      console.log('Clear color set, current clear color:', renderer.getClearColor());
+      console.log('Clear color set successfully');
     } else {
       console.error('ERROR: Renderer ref is undefined!');
     }
