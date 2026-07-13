@@ -474,8 +474,8 @@ export function initUI() {
   });
 
   // --- Mask navigation ---
-  const btnPrevMask = getElem(DOM.BTN_PREV_MASK);
-  const btnNextMask = getElem(DOM.BTN_NEXT_MASK);
+  const btnPrevMask = document.getElementById(DOM.BTN_PREV_MASK);
+  const btnNextMask = document.getElementById(DOM.BTN_NEXT_MASK);
   if (btnPrevMask) btnPrevMask.onclick = () => selectSAMMask(-1);
   if (btnNextMask) btnNextMask.onclick = () => selectSAMMask(1);
 
