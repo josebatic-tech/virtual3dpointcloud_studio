@@ -14,7 +14,10 @@ export function renderWithPostProcessing() {
   const renderer = ref('renderer');
   const scene = ref('scene');
   const camera = ref('camera');
-  if (renderer && scene && camera) renderer.render(scene, camera);
+  if (renderer && scene && camera) {
+    renderer.clear();
+    renderer.render(scene, camera);
+  }
 }
 
 export function toggleFXAA(enabled) {
