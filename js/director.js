@@ -49,12 +49,21 @@ export function setColorBackground(color) {
   };
 
   if (colors[color]) {
+    const hexColor = colors[color];
     const renderer = ref('renderer');
     if (renderer) {
-      renderer.setClearColor(colors[color], 1);
+      renderer.setClearColor(hexColor, 1);
+      console.log(`Renderer clear color set to: 0x${hexColor.toString(16)}`);
     }
 
-    setBackgroundColor(colors[color]);
+    const backdrop = ref('colorBackdrop');
+    console.log(`Backdrop ref:`, backdrop);
+    if (backdrop && backdrop.material) {
+      backdrop.material.color.setHex(hexColor);
+      console.log(`Backdrop material color set to: 0x${hexColor.toString(16)}`);
+    }
+
+    setBackgroundColor(hexColor);
 
     // Update button states
     document.getElementById('btnBgGreen')?.classList.toggle('active', color === 'green');
