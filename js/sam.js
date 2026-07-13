@@ -86,7 +86,8 @@ export async function runSAM() {
     set('samScores', iou_scores?.data);
 
     const total = get('samMaskCount');
-    getElem(DOM.SAM_MASK_SELECTOR).classList.toggle('visible', total > 1);
+    const maskSelector = document.getElementById(DOM.SAM_MASK_SELECTOR);
+    if (maskSelector) maskSelector.classList.toggle('visible', total > 1);
     updateMaskLabel();
     setText(DOM.SAM_STATUS, total + ' masks — use ◀ ▶ to select');
 
