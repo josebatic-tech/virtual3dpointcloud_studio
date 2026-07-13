@@ -51,7 +51,7 @@ function _buildColorBackdrop() {
   const color = get('backgroundColor') || 0x080a0e;
   const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
   const backdrop = new THREE.Mesh(geo, mat);
-  backdrop.visible = get('colorBackdropVisible');
+  backdrop.visible = get('colorBackdropVisible') !== false;
   ref('scene').add(backdrop);
   setRef('colorBackdrop', backdrop);
 }
