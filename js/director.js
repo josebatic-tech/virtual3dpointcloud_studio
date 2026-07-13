@@ -48,27 +48,22 @@ export function setColorBackground(color) {
     yellow: 0x8b7b2f,
   };
 
-  const renderer = ref('renderer');
-  const scene = ref('scene');
-
-  if (renderer && colors[color]) {
-    renderer.setClearColor(colors[color], 1);
-    set('backgroundColor', colors[color]);
-
-    // Also update backdrop if it exists
-    const backdrop = ref('colorBackdrop');
-    if (backdrop && backdrop.material) {
-      backdrop.material.color.setHex(colors[color]);
+  if (colors[color]) {
+    const renderer = ref('renderer');
+    if (renderer) {
+      renderer.setClearColor(colors[color], 1);
     }
+
+    setBackgroundColor(colors[color]);
+
+    // Update button states
+    document.getElementById('btnBgGreen')?.classList.toggle('active', color === 'green');
+    document.getElementById('btnBgBlue')?.classList.toggle('active', color === 'blue');
+    document.getElementById('btnBgRed')?.classList.toggle('active', color === 'red');
+    document.getElementById('btnBgYellow')?.classList.toggle('active', color === 'yellow');
+
+    console.log(`Background color: ${color}`);
   }
-
-  // Update button states
-  document.getElementById('btnBgGreen')?.classList.toggle('active', color === 'green');
-  document.getElementById('btnBgBlue')?.classList.toggle('active', color === 'blue');
-  document.getElementById('btnBgRed')?.classList.toggle('active', color === 'red');
-  document.getElementById('btnBgYellow')?.classList.toggle('active', color === 'yellow');
-
-  console.log(`Background color: ${color}`);
 }
 
 export function toggleParticles(type) {
