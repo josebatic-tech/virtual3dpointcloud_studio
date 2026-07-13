@@ -34,7 +34,6 @@ export function initUI() {
     set('ptSize', 1);
     // Disable autorotate by default
     set('autoRotate', false);
-    console.log('📱 Mobile: density=10, ptSize=1, particles OFF, autoRotate OFF');
   }
 
   const btnStart = getElem(DOM.BTN_START);
@@ -215,7 +214,6 @@ export function initUI() {
         const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
         const FPS_TARGET = isMobile ? 8 : 30;
         const frameTime = 1000 / FPS_TARGET;
-        if (isMobile) console.log('📱 Mobile depth: 8fps, skip every other frame');
         let lastDepthTime = 0;
         let frameSkip = 0;
         while (get('isRunning')) {
@@ -300,7 +298,6 @@ export function initUI() {
   // Viewport toggle (Point Cloud ↔ Camera)
   if (btnViewPointCloud && btnViewCamera) {
     btnViewPointCloud.onclick = () => {
-      console.log('Switching to 3D Cloud view');
       const canvas = document.getElementById('pcCanvas');
       const videoContainer = document.getElementById('cameraViewContainer');
 
@@ -338,7 +335,6 @@ export function initUI() {
     };
 
     btnViewCamera.onclick = () => {
-      console.log('Switching to Camera view');
       const canvas = document.getElementById('pcCanvas');
       const videoContainer = document.getElementById('cameraViewContainer');
       const cameraViewVideo = document.getElementById('cameraViewVideo');
@@ -602,21 +598,9 @@ export function initVLMChat() {
   const vlmSystemPrompt = document.getElementById('vlmSystemPrompt');
   const vlmModel = document.getElementById('vlmModel');
 
-  console.log('🤖 Initializing VLM Chat...');
-  console.log('  vlmInput:', !!vlmInput);
-  console.log('  btnVLMSend:', !!btnVLMSend);
-  console.log('  vlmChat:', !!vlmChat);
-
   if (!vlmInput || !btnVLMSend || !vlmChat) {
-    console.error('❌ VLM chat elements not found!');
-    console.error('  Missing:', {
-      vlmInput: !vlmInput,
-      btnVLMSend: !btnVLMSend,
-      vlmChat: !vlmChat
-    });
     return;
   }
-  console.log('✅ VLM chat elements found');
 
   // Load history from localStorage
   const savedHistory = localStorage.getItem('vlmHistory');
@@ -638,16 +622,12 @@ export function initVLMChat() {
 
   async function sendMessage() {
     const userText = vlmInput.value.trim();
-    console.log('📤 Send message:', userText);
-    console.log('   Stream ready:', !!get('stream'));
 
     if (!userText) {
-      console.log('⚠️  Empty message, ignoring');
       return;
     }
 
     if (!get('stream')) {
-      console.log('⚠️  No video stream! Start camera first.');
       vlmInput.placeholder = 'Start camera first (Camera tab)';
       return;
     }
@@ -655,7 +635,6 @@ export function initVLMChat() {
     vlmInput.value = '';
     vlmInput.disabled = true;
     btnVLMSend.disabled = true;
-    console.log('🔄 Sending to VLM...');
 
     const userMsg = { role: 'user', content: userText };
     history.push(userMsg);

@@ -5,9 +5,7 @@ import { startRenderLoop } from './render-loop.js';
 import { initInteractiveLights, updateLightPosition } from './interactive-lights.js';
 
 export function initThree() {
-  console.log('initThree called');
   const canvas = document.getElementById(DOM.PC_CANVAS);
-  console.log('canvas:', canvas?.clientWidth, 'x', canvas?.clientHeight);
 
   const sc = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(55, canvas.clientWidth / canvas.clientHeight, 0.01, 200);

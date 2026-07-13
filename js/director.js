@@ -36,13 +36,9 @@ export function setCameraPosition(angle) {
 
   document.getElementById('btnCamLeft')?.classList.toggle('active', angle < 0);
   document.getElementById('btnCamRight')?.classList.toggle('active', angle > 0);
-
-  console.log(`Camera position: ${angle}°`);
 }
 
 export function setColorBackground(color) {
-  console.log('=== setColorBackground called with:', color);
-
   const colors = {
     green: 0x1a5f3f,
     blue: 0x0d3b66,
@@ -52,16 +48,9 @@ export function setColorBackground(color) {
 
   if (colors[color]) {
     const hexColor = colors[color];
-    console.log('Hex color:', hexColor.toString(16));
-
     const renderer = ref('renderer');
-    console.log('Renderer exists?', !!renderer);
     if (renderer) {
-      console.log('Setting clear color to:', '0x' + hexColor.toString(16));
       renderer.setClearColor(hexColor, 1);
-      console.log('Clear color set successfully');
-    } else {
-      console.error('ERROR: Renderer ref is undefined!');
     }
 
     setBackgroundColor(hexColor);
@@ -71,8 +60,6 @@ export function setColorBackground(color) {
     document.getElementById('btnBgBlue')?.classList.toggle('active', color === 'blue');
     document.getElementById('btnBgRed')?.classList.toggle('active', color === 'red');
     document.getElementById('btnBgYellow')?.classList.toggle('active', color === 'yellow');
-  } else {
-    console.error('Invalid color:', color);
   }
 }
 
@@ -90,6 +77,4 @@ export function toggleParticles(type) {
   document.getElementById('btnParticleRain')?.classList.toggle('active', get('particleType') === 'rain');
   document.getElementById('btnParticleSnow')?.classList.toggle('active', get('particleType') === 'snow');
   document.getElementById('btnParticleWind')?.classList.toggle('active', get('particleType') === 'wind');
-
-  console.log(`Particle effect: ${get('particleType') || 'none'}`);
 }

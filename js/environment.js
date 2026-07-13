@@ -55,7 +55,6 @@ function _buildColorBackdrop() {
   backdrop.renderOrder = -1000;
   ref('scene').add(backdrop);
   setRef('colorBackdrop', backdrop);
-  console.log(`Backdrop sphere created: color=0x${color.toString(16)}, visible=${backdrop.visible}, size=100`);
 }
 
 function _updateFog() {
