@@ -76,7 +76,10 @@
       "Bash(git commit -m 'fix: use getElementById instead of getElem for optional SAM buttons *)",
       "Bash(git commit -m 'fix: remove getElem call for removed SAM mask selector *)",
       "Bash(git commit -m 'debug: add logging for background color changes *)",
-      "Bash(git commit -m 'remove: delete DEPTH/CLOUD header banner *)"
+      "Bash(git commit -m 'remove: delete DEPTH/CLOUD header banner *)",
+      "Bash(git commit -m 'fix: enable render order for backdrop visibility *)",
+      "Bash(git commit -m 'fix: disable depth testing for backdrop to ensure visibility *)",
+      "Bash(git commit *)"
     ]
   }
 }

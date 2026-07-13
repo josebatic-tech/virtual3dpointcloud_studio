@@ -1,4 +1,4 @@
-import { set, ref } from './store.js';
+import { get, set, ref } from './store.js';
 
 /**
  * Post-processing was removed per simplification (see CLAUDE.md).
@@ -15,6 +15,8 @@ export function renderWithPostProcessing() {
   const scene = ref('scene');
   const camera = ref('camera');
   if (renderer && scene && camera) {
+    const bgColor = get('backgroundColor') || 0x080a0e;
+    renderer.setClearColor(bgColor, 1);
     renderer.clear();
     renderer.render(scene, camera);
   }
