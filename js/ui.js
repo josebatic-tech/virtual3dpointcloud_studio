@@ -455,8 +455,9 @@ export function initUI() {
     set('samEnabled', v);
     video.classList.toggle('sam-active', v);
     const statusEl = document.getElementById(DOM.SAM_STATUS);
-    statusEl.textContent = v ? (get('samLoaded') ? 'ready — click preview' : 'loading…') : '';
-    document.getElementById(DOM.SAM_MASK_SELECTOR).classList.remove('visible');
+    if (statusEl) statusEl.textContent = v ? (get('samLoaded') ? 'ready — click preview' : 'loading…') : '';
+    const maskSelector = document.getElementById(DOM.SAM_MASK_SELECTOR);
+    if (maskSelector) maskSelector.classList.remove('visible');
     if (!v) clearSam();
     if (v && !get('samLoaded')) {
       try {
@@ -473,8 +474,10 @@ export function initUI() {
   });
 
   // --- Mask navigation ---
-  getElem(DOM.BTN_PREV_MASK).onclick = () => selectSAMMask(-1);
-  getElem(DOM.BTN_NEXT_MASK).onclick = () => selectSAMMask(1);
+  const btnPrevMask = getElem(DOM.BTN_PREV_MASK);
+  const btnNextMask = getElem(DOM.BTN_NEXT_MASK);
+  if (btnPrevMask) btnPrevMask.onclick = () => selectSAMMask(-1);
+  if (btnNextMask) btnNextMask.onclick = () => selectSAMMask(1);
 
   // Initialize tab switching
   initTabSwitching();
