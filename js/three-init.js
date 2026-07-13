@@ -20,6 +20,7 @@ export function initThree() {
   ren.setPixelRatio(pixelRatio);
   ren.setSize(canvas.clientWidth, canvas.clientHeight);
   ren.setClearColor(0x080a0e, 1);
+  ren.sortObjects = true;
 
   setRef('scene', sc);
   setRef('camera', cam);

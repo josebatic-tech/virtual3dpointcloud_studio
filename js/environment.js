@@ -52,8 +52,10 @@ function _buildColorBackdrop() {
   const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
   const backdrop = new THREE.Mesh(geo, mat);
   backdrop.visible = get('colorBackdropVisible') !== false;
+  backdrop.renderOrder = -100;
   ref('scene').add(backdrop);
   setRef('colorBackdrop', backdrop);
+  console.log(`Backdrop sphere created: color=0x${color.toString(16)}, visible=${backdrop.visible}, renderOrder=${backdrop.renderOrder}`);
 }
 
 function _updateFog() {
